@@ -1,0 +1,2 @@
+"""Berceau effectif app."""
+

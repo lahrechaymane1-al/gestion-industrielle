@@ -1,0 +1,16 @@
+{% extends 'app/base_auth.html' %}
+
+{% block content %}
+<div class="card">
+    <h2>Detail production Berceau</h2>
+    <p><strong>Diversite:</strong> {{ production.line }}</p>
+    <p><strong>Date:</strong> {{ production.date|date:'Y-m-d' }}</p>
+    <p><strong>Shift:</strong> {{ production.shift }}</p>
+    <p><strong>Objectif:</strong> {{ production.objectif }}</p>
+    <p><strong>Production H1-H8:</strong> {{ production.production_h1 }}, {{ production.production_h2 }}, {{ production.production_h3 }}, {{ production.production_h4 }}, {{ production.production_h5 }}, {{ production.production_h6 }}, {{ production.production_h7 }}, {{ production.production_h8 }}</p>
+    <p><strong>Objectif H1-H8:</strong> {{ production.objectif_h1 }}, {{ production.objectif_h2 }}, {{ production.objectif_h3 }}, {{ production.objectif_h4 }}, {{ production.objectif_h5 }}, {{ production.objectif_h6 }}, {{ production.objectif_h7 }}, {{ production.objectif_h8 }}</p>
+    <p><strong>Rebut:</strong> {{ production.rebut }}</p>
+    <p><strong>Production totale:</strong> {{ production.volume }}</p>
+    <a href="{% url 'berceau_production_list' %}" class="secondary-btn">Retour</a>
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Local runtime data
+db.sqlite3
+*.sqlite3
+
+# Environment files
+.env
+
+# IDE / OS files
+.DS_Store
+Thumbs.db
+.cursor/
+.vscode/
+*.log
+debug-*.log
+
+# Node (React frontend)
+frontend/node_modules/
+frontend/dist/
+
+# Vite cache
+frontend/.vite/
+node_modules

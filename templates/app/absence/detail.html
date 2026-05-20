@@ -1,0 +1,23 @@
+{% extends 'app/base_auth.html' %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ page_title }}</h2>
+    <div class="table-wrap">
+        <table>
+            <tbody>
+                <tr><th>NOM_COMPLET</th><td>{{ absence.nom_complet|default:absence.absent_nom }}</td></tr>
+                <tr><th>Shift</th><td>{{ absence.shift }}</td></tr>
+                <tr><th>Date absence</th><td>{{ absence.date_absence|date:'Y-m-d' }}</td></tr>
+                <tr><th>Motif</th><td>{{ absence.motif }}</td></tr>
+                <tr><th>Remplacant</th><td>{{ absence.remplacant_nom }}</td></tr>
+                <tr><th>Commentaire</th><td>{{ absence.commentaire|default:"-" }}</td></tr>
+                <tr><th>Equipe</th><td>{{ absence.equipe }}</td></tr>
+                <tr><th>Cree le</th><td>{{ absence.created_at|date:'Y-m-d H:i' }}</td></tr>
+                <tr><th>Mis a jour le</th><td>{{ absence.updated_at|date:'Y-m-d H:i' }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <a href="{% url return_url_name %}" class="secondary-btn">Retour</a>
+</div>
+{% endblock %}

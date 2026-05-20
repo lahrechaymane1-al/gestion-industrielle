@@ -1,0 +1,2 @@
+"""Berceau mode degrade app."""
+

@@ -1,0 +1,68 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - Gestion Industrielle</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'ui/style.css' %}?v=20260430-ui-split">
+</head>
+<body class="app-body">
+    <div class="app-shell {% if sidebar_hidden_default %}sidebar-hidden{% endif %}" id="appShell">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a class="logo-button" href="{% url 'home' %}?sidebar=hidden" aria-label="Retour a l'accueil">
+                    <span class="logo-sidebar">Gestion Industrielle</span>
+                </a>
+            </div>
+            <nav class="menu-tree">
+                <button class="menu-parent" type="button" data-menu-target="berceauMenu">Berceau</button>
+                <div class="menu-children {% if active_page|slice:':7' == 'berceau' %}open{% endif %}" id="berceauMenu">
+                    <a href="{% url 'berceau_production_list' %}" class="{% if active_page == 'berceau_production' %}active{% endif %}">Production</a>
+                    <a href="{% url 'berceau_mode_degrade' %}" class="{% if active_page == 'berceau_mode_degrade' %}active{% endif %}">Mode Degrade</a>
+                    <a href="{% url 'berceau_absence' %}" class="{% if active_page == 'berceau_absence' %}active{% endif %}">Absence</a>
+                    <a href="{% url 'berceau_effectif' %}" class="{% if active_page == 'berceau_effectif' %}active{% endif %}">Effectif</a>
+                    <a href="{% url 'berceau_stock' %}" class="{% if active_page == 'berceau_stock' %}active{% endif %}">Stock</a>
+                    <a href="{% url 'berceau_arret' %}" class="{% if active_page == 'berceau_arret' %}active{% endif %}">Arret</a>
+                </div>
+                <button class="menu-parent" type="button" data-menu-target="ccbMenu">CCB</button>
+                <div class="menu-children {% if active_page|slice:':3' == 'ccb' %}open{% endif %}" id="ccbMenu">
+                    <a href="{% url 'ccb_production' %}" class="{% if active_page == 'ccb_production' %}active{% endif %}">Production CCB</a>
+                    <a href="{% url 'ccb_mode_degrade' %}" class="{% if active_page == 'ccb_mode_degrade' %}active{% endif %}">Mode Degrade CCB</a>
+                    <a href="{% url 'ccb_absence' %}" class="{% if active_page == 'ccb_absence' %}active{% endif %}">Absence CCB</a>
+                    <a href="{% url 'ccb_effectif' %}" class="{% if active_page == 'ccb_effectif' %}active{% endif %}">Effectif CCB</a>
+                    <a href="{% url 'ccb_stock' %}" class="{% if active_page == 'ccb_stock' %}active{% endif %}">Stock CCB</a>
+                    <a href="{% url 'ccb_arret' %}" class="{% if active_page == 'ccb_arret' %}active{% endif %}">Arret CCB</a>
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <a href="{% url 'logout' %}" class="logout-link">Deconnexion</a>
+            </div>
+        </aside>
+
+        <main class="main-layout">
+            <header class="topbar">
+                <button type="button" class="topbar-button topbar-logo-toggle" id="topbarSidebarToggle" aria-label="Ouvrir ou fermer le menu">
+                    <span class="menu-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <span class="menu-text">Menu</span>
+                </button>
+                <h1>{{ page_title }}</h1>
+            </header>
+            <section class="content-wrapper fade-in">
+                {% if messages %}
+                    <div class="message-zone">
+                        {% for message in messages %}
+                            <div class="message {{ message.tags }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% block content %}{% endblock %}
+            </section>
+        </main>
+    </div>
+    <script src="{% static 'ui/app.js' %}"></script>
+</body>
+</html>

@@ -1,0 +1,667 @@
+"""JSON API for Production Berceau / CCB (React SPA)."""
+from django.core.paginator import Paginator
+from django.db import DatabaseError
+from django.db.models import Q, Sum
+from django.forms.models import model_to_dict
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404
+
+from .authz import (
+    can_do_action as auth_can_do_action,
+    ensure_psp_object_access,
+    ensure_shift_allowed,
+    get_psp_equipe,
+    is_admin_or_ru,
+    is_psp,
+    restrict_psp_scope,
+)
+from .api_panne_views import _parse_heure_bounds
+from .api_utils import json_body, json_forbidden, parse_query_int
+from .ccb_constants import CCB_OBJECTIFS_HORAIRES
+from .forms import ProductionBerceauForm, ProductionCCBForm
+from .models import AlertePanne, ArretBerceau, ProductionBerceau, ProductionCCB
+
+logger = __import__("logging").getLogger(__name__)
+
+
+def _berceau_effective_objectif_volume(row: ProductionBerceau) -> tuple[int, int]:
+    """Objectif / volume alignés sur les champs horaires si renseignés (sinon champs agrégés)."""
+    ho = sum(int(getattr(row, f"objectif_h{h}", 0) or 0) for h in range(1, 9))
+    hv = sum(int(getattr(row, f"production_h{h}", 0) or 0) for h in range(1, 9))
+    o = ho if ho > 0 else int(row.objectif or 0)
+    v = hv if hv > 0 else int(row.volume or 0)
+    return o, v
+
+
+def filter_production_berceau_by_diversite(queryset, line: str):
+    """Fiches dont la diversité globale OU au moins une heure correspond à A1/A3."""
+    if line not in {"A1", "A3"}:
+        return queryset
+    q = Q(line=line)
+    for hour in range(1, 9):
+        q |= Q(**{f"line_h{hour}": line})
+    return queryset.filter(q)
+
+
+def _strip_production_arret_inputs(payload: dict) -> dict:
+    data = dict(payload or {})
+    data["temps_arrets"] = 0
+    for hour in range(1, 9):
+        data[f"temps_arrets_h{hour}"] = 0
+    return data
+
+
+def _berceau_to_dict(obj: ProductionBerceau) -> dict:
+    live_arrets = obj.compute_hourly_arrets_from_sources()
+    d = model_to_dict(
+        obj,
+        fields=[
+            "id",
+            "line",
+            "date",
+            "shift",
+            "objectif",
+            "objectif_h1",
+            "objectif_h2",
+            "objectif_h3",
+            "objectif_h4",
+            "objectif_h5",
+            "objectif_h6",
+            "objectif_h7",
+            "objectif_h8",
+            "line_h1",
+            "line_h2",
+            "line_h3",
+            "line_h4",
+            "line_h5",
+            "line_h6",
+            "line_h7",
+            "line_h8",
+            "production_h1",
+            "production_h2",
+            "production_h3",
+            "production_h4",
+            "production_h5",
+            "production_h6",
+            "production_h7",
+            "production_h8",
+            "rebut_h1",
+            "rebut_h2",
+            "rebut_h3",
+            "rebut_h4",
+            "rebut_h5",
+            "rebut_h6",
+            "rebut_h7",
+            "rebut_h8",
+            "retouche_h1",
+            "retouche_h2",
+            "retouche_h3",
+            "retouche_h4",
+            "retouche_h5",
+            "retouche_h6",
+            "retouche_h7",
+            "retouche_h8",
+            "temps_arrets_h1",
+            "temps_arrets_h2",
+            "temps_arrets_h3",
+            "temps_arrets_h4",
+            "temps_arrets_h5",
+            "temps_arrets_h6",
+            "temps_arrets_h7",
+            "temps_arrets_h8",
+            "volume",
+            "rebut",
+            "retouche",
+            "temps_arrets",
+            "validated_hours_mask",
+        ],
+    )
+    d["date"] = obj.date.isoformat() if obj.date else None
+    for hour in range(1, 9):
+        d[f"temps_arrets_h{hour}"] = live_arrets.get(hour, 0)
+    d["temps_arrets"] = sum(live_arrets.values())
+    o_eff, v_eff = _berceau_effective_objectif_volume(obj)
+    d["ro_percent"] = round((v_eff / o_eff) * 100, 2) if o_eff > 0 else 0
+    d["nro_total"] = max(o_eff - v_eff, 0)
+    d["validated_hours"] = obj.validated_hours
+    d["arrets_source"] = "arret_module"
+    return d
+
+
+def _ccb_to_dict(obj: ProductionCCB) -> dict:
+    d = model_to_dict(
+        obj,
+        fields=[
+            "id",
+            "date",
+            "shift",
+            "objectif",
+            "production_h1",
+            "production_h2",
+            "production_h3",
+            "production_h4",
+            "production_h5",
+            "production_h6",
+            "production_h7",
+            "production_h8",
+            "rebut_h1",
+            "rebut_h2",
+            "rebut_h3",
+            "rebut_h4",
+            "rebut_h5",
+            "rebut_h6",
+            "rebut_h7",
+            "rebut_h8",
+            "volume",
+            "rebut",
+            "retouche",
+        ],
+    )
+    d["date"] = obj.date.isoformat() if obj.date else None
+    d["ro_percent"] = obj.ro_percent
+    d["temps_arrets"] = obj.compute_temps_arrets_from_alertes()
+    for h in range(1, 9):
+        d[f"objectif_h{h}"] = int(CCB_OBJECTIFS_HORAIRES[h - 1])
+    by_h = obj.temps_arrets_by_hour()
+    for h in range(1, 9):
+        d[f"temps_arrets_h{h}"] = by_h.get(h, 0)
+    return d
+
+
+def _psp_locked_hour_edit_attempt(request, obj: ProductionBerceau, payload: dict) -> bool:
+    """Hourly validation lock disabled — all roles can PATCH hourly fields freely."""
+    return False
+
+
+def api_production_berceau(request):
+    if request.method == "GET":
+        if not auth_can_do_action(request.user, "read"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "Berceau":
+            queryset = ProductionBerceau.objects.none()
+        else:
+            queryset = ProductionBerceau.objects.all()
+            queryset = restrict_psp_scope(request.user, queryset, shift_field="shift")
+        line = (request.GET.get("line") or "").strip()
+        queryset = filter_production_berceau_by_diversite(queryset, line)
+        date_val = (request.GET.get("date") or "").strip()
+        if date_val:
+            queryset = queryset.filter(date=date_val)
+        shift = (request.GET.get("shift") or "").strip()
+        if shift in {"A", "B", "N"}:
+            queryset = queryset.filter(shift=shift)
+        q = (request.GET.get("q") or "").strip()
+        if q:
+            queryset = queryset.filter(Q(line__icontains=q))
+        sort = request.GET.get("sort", "-date")
+        allowed = {"date", "-date", "line", "-line", "shift", "-shift"}
+        if sort not in allowed:
+            sort = "-date"
+        queryset = queryset.order_by(sort)
+        page = parse_query_int(request, "page", 1, minimum=1)
+        per_page = parse_query_int(request, "per_page", 20, minimum=1, maximum=100)
+        try:
+            page_obj = Paginator(queryset, per_page).get_page(page)
+            results = [_berceau_to_dict(item) for item in page_obj]
+        except DatabaseError:
+            logger.exception("api_production_berceau GET database error")
+            return JsonResponse(
+                {
+                    "error": "Erreur base de donnees. Verifiez que les migrations sont appliquees (manage.py migrate).",
+                },
+                status=503,
+            )
+        return JsonResponse(
+            {
+                "results": results,
+                "page": page_obj.number,
+                "pages": page_obj.paginator.num_pages,
+                "total": page_obj.paginator.count,
+            }
+        )
+    if request.method == "POST":
+        if not auth_can_do_action(request.user, "create"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "Berceau":
+            return json_forbidden()
+        payload = _strip_production_arret_inputs(json_body(request))
+        shift_val = (payload.get("shift") or "").strip()
+        if shift_val in {"A", "B", "N"}:
+            if not ensure_shift_allowed(request.user, shift_val, endpoint="api_production_berceau POST"):
+                return json_forbidden()
+        form = ProductionBerceauForm(payload)
+        if form.is_valid():
+            obj = form.save()
+            return JsonResponse(_berceau_to_dict(obj), status=201)
+        return JsonResponse({"errors": form.errors}, status=400)
+    return HttpResponse(status=405)
+
+
+def api_production_berceau_detail(request, pk):
+    obj = get_object_or_404(ProductionBerceau, pk=pk)
+    if request.method == "GET":
+        if not auth_can_do_action(request.user, "read"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "Berceau":
+            return json_forbidden()
+        if not ensure_psp_object_access(request.user, obj, endpoint="api_production_berceau_detail GET"):
+            return json_forbidden()
+        return JsonResponse(_berceau_to_dict(obj))
+    if request.method in {"PUT", "PATCH"}:
+        if not auth_can_do_action(request.user, "update"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "Berceau":
+            return json_forbidden()
+        if not ensure_psp_object_access(request.user, obj, endpoint="api_production_berceau_detail PATCH"):
+            return json_forbidden()
+        data = _strip_production_arret_inputs(json_body(request))
+        shift_val = (data.get("shift") or obj.shift or "").strip()
+        if shift_val in {"A", "B", "N"}:
+            if not ensure_shift_allowed(request.user, shift_val, endpoint="api_production_berceau_detail PATCH"):
+                return json_forbidden()
+        if _psp_locked_hour_edit_attempt(request, obj, data):
+            return JsonResponse(
+                {"error": "Une heure validee ne peut pas etre modifiee par un profil PSP."},
+                status=403,
+            )
+        form = ProductionBerceauForm(data, instance=obj)
+        if form.is_valid():
+            saved = form.save()
+            return JsonResponse(_berceau_to_dict(saved))
+        return JsonResponse({"errors": form.errors}, status=400)
+    if request.method == "DELETE":
+        if not auth_can_do_action(request.user, "delete"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "Berceau":
+            return json_forbidden()
+        if not ensure_psp_object_access(request.user, obj, endpoint="api_production_berceau_detail DELETE"):
+            return json_forbidden()
+        obj.delete()
+        return JsonResponse({"deleted": True})
+    return HttpResponse(status=405)
+
+
+def api_production_berceau_validate_hour(request, pk):
+    if request.method != "POST":
+        return HttpResponse(status=405)
+    if not auth_can_do_action(request.user, "update"):
+        return json_forbidden()
+    obj = get_object_or_404(ProductionBerceau, pk=pk)
+    if is_psp(request.user) and get_psp_equipe(request.user) != "Berceau":
+        return json_forbidden()
+    if not ensure_psp_object_access(request.user, obj, endpoint="api_production_berceau_validate_hour"):
+        return json_forbidden()
+    payload = json_body(request)
+    try:
+        hour = int(payload.get("hour"))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "Le champ hour est obligatoire (1..8)."}, status=400)
+    if hour < 1 or hour > 8:
+        return JsonResponse({"error": "Le champ hour doit etre compris entre 1 et 8."}, status=400)
+    if hour > 1 and not obj.is_hour_validated(hour - 1):
+        return JsonResponse({"error": "Validation sequentielle requise (Hx-1 doit etre validee)."}, status=400)
+    if obj.is_hour_validated(hour):
+        return JsonResponse({"ok": True, "already_validated": True, "validated_hours": obj.validated_hours})
+    obj.validate_hour(hour)
+    obj.save(update_fields=["validated_hours_mask"])
+    return JsonResponse({"ok": True, "validated_hours": obj.validated_hours, "validated_hours_mask": obj.validated_hours_mask})
+
+
+def api_production_ccb(request):
+    if request.method == "GET":
+        if not auth_can_do_action(request.user, "read"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "CCB":
+            queryset = ProductionCCB.objects.none()
+        else:
+            queryset = restrict_psp_scope(request.user, ProductionCCB.objects.all(), shift_field="shift")
+        shift = (request.GET.get("shift") or "").strip()
+        if shift in {"A", "B", "N"}:
+            queryset = queryset.filter(shift=shift)
+        date_val = (request.GET.get("date") or "").strip()
+        if date_val:
+            queryset = queryset.filter(date=date_val)
+        sort = request.GET.get("sort", "-date")
+        allowed = {"date", "-date", "shift", "-shift"}
+        if sort not in allowed:
+            sort = "-date"
+        queryset = queryset.order_by(sort)
+        page = parse_query_int(request, "page", 1, minimum=1)
+        per_page = parse_query_int(request, "per_page", 20, minimum=1, maximum=100)
+        try:
+            page_obj = Paginator(queryset, per_page).get_page(page)
+            results = [_ccb_to_dict(item) for item in page_obj]
+        except DatabaseError:
+            logger.exception("api_production_ccb GET database error")
+            return JsonResponse(
+                {
+                    "error": "Erreur base de donnees. Executez: python manage.py migrate (notamment production_ccb).",
+                },
+                status=503,
+            )
+        return JsonResponse(
+            {
+                "results": results,
+                "page": page_obj.number,
+                "pages": page_obj.paginator.num_pages,
+                "total": page_obj.paginator.count,
+            }
+        )
+    if request.method == "POST":
+        if not auth_can_do_action(request.user, "create"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "CCB":
+            return json_forbidden()
+        payload = json_body(request)
+        shift_val = (payload.get("shift") or "").strip()
+        if shift_val in {"A", "B", "N"}:
+            if not ensure_shift_allowed(request.user, shift_val, endpoint="api_production_ccb POST"):
+                return json_forbidden()
+        form = ProductionCCBForm(payload)
+        if form.is_valid():
+            obj = form.save()
+            return JsonResponse(_ccb_to_dict(obj), status=201)
+        return JsonResponse({"errors": form.errors}, status=400)
+    return HttpResponse(status=405)
+
+
+def api_production_ccb_detail(request, pk):
+    try:
+        obj = get_object_or_404(ProductionCCB, pk=pk)
+    except DatabaseError:
+        logger.exception("api_production_ccb_detail load pk=%s", pk)
+        return JsonResponse(
+            {
+                "error": "Erreur base de donnees. Executez: python manage.py migrate (application production_ccb).",
+            },
+            status=503,
+        )
+    if request.method == "GET":
+        if not auth_can_do_action(request.user, "read"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "CCB":
+            return json_forbidden()
+        if not ensure_psp_object_access(request.user, obj, endpoint="api_production_ccb_detail GET"):
+            return json_forbidden()
+        return JsonResponse(_ccb_to_dict(obj))
+    if request.method in {"PUT", "PATCH"}:
+        if not auth_can_do_action(request.user, "update"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "CCB":
+            return json_forbidden()
+        if not ensure_psp_object_access(request.user, obj, endpoint="api_production_ccb_detail PATCH"):
+            return json_forbidden()
+        data = json_body(request)
+        shift_val = (data.get("shift") or obj.shift or "").strip()
+        if shift_val in {"A", "B", "N"}:
+            if not ensure_shift_allowed(request.user, shift_val, endpoint="api_production_ccb_detail PATCH"):
+                return json_forbidden()
+        form = ProductionCCBForm(data, instance=obj)
+        if form.is_valid():
+            saved = form.save()
+            return JsonResponse(_ccb_to_dict(saved))
+        return JsonResponse({"errors": form.errors}, status=400)
+    if request.method == "DELETE":
+        if not auth_can_do_action(request.user, "delete"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "CCB":
+            return json_forbidden()
+        if not ensure_psp_object_access(request.user, obj, endpoint="api_production_ccb_detail DELETE"):
+            return json_forbidden()
+        obj.delete()
+        return JsonResponse({"deleted": True})
+    return HttpResponse(status=405)
+
+
+def api_dashboard_ro_nro_trend(request):
+    if request.method != "GET":
+        return HttpResponse(status=405)
+    if not auth_can_do_action(request.user, "read"):
+        return json_forbidden()
+
+    shift = (request.GET.get("shift") or "").strip()
+    date_from = (request.GET.get("date_from") or "").strip()
+    date_to = (request.GET.get("date_to") or "").strip()
+    if shift:
+        if shift not in {"A", "B", "N"}:
+            return JsonResponse({"error": "Shift invalide."}, status=400)
+        if not ensure_shift_allowed(request.user, shift, endpoint="api_dashboard_ro_nro_trend GET"):
+            return json_forbidden()
+
+    # UEP Berceau uniquement (aligné fiche production Berceau ; pas d’agrégation CCB ici).
+    b_qs = restrict_psp_scope(request.user, ProductionBerceau.objects.all(), shift_field="shift")
+    if shift:
+        b_qs = b_qs.filter(shift=shift)
+    if date_from:
+        b_qs = b_qs.filter(date__gte=date_from)
+    if date_to:
+        b_qs = b_qs.filter(date__lte=date_to)
+
+    by_date: dict[str, dict[str, int]] = {}
+    for row in b_qs.order_by("date", "shift"):
+        d = row.date.isoformat()
+        o_eff, v_eff = _berceau_effective_objectif_volume(row)
+        agg = by_date.setdefault(d, {"objectif": 0, "volume": 0})
+        agg["objectif"] += o_eff
+        agg["volume"] += v_eff
+
+    labels = sorted(by_date.keys())
+    ro_series = []
+    nro_series = []
+    for day in labels:
+        objectif = by_date[day]["objectif"]
+        volume = by_date[day]["volume"]
+        ro = round((volume / objectif) * 100, 2) if objectif > 0 else 0
+        nro = round(max(100 - ro, 0), 2)
+        ro_series.append(ro)
+        nro_series.append(nro)
+
+    return JsonResponse(
+        {
+            "labels": labels,
+            "series": {"ro_percent": ro_series, "nro_percent": nro_series},
+            "totals": {
+                "objectif": sum(v["objectif"] for v in by_date.values()),
+                "volume": sum(v["volume"] for v in by_date.values()),
+            },
+        }
+    )
+
+
+def api_dashboard_arrets_par_jour(request):
+    if request.method != "GET":
+        return HttpResponse(status=405)
+    if not auth_can_do_action(request.user, "read"):
+        return json_forbidden()
+
+    shift = (request.GET.get("shift") or "").strip()
+    date_from = (request.GET.get("date_from") or "").strip()
+    date_to = (request.GET.get("date_to") or "").strip()
+    if shift:
+        if shift not in {"A", "B", "N"}:
+            return JsonResponse({"error": "Shift invalide."}, status=400)
+        if not ensure_shift_allowed(request.user, shift, endpoint="api_dashboard_arrets_par_jour GET"):
+            return json_forbidden()
+
+    arret_ber_qs = restrict_psp_scope(request.user, ArretBerceau.objects.all(), shift_field="shift")
+    alerte_base = restrict_psp_scope(
+        request.user,
+        AlertePanne.objects.filter(is_deleted=False),
+        shift_field="shift",
+        equipe_field="equipe",
+    )
+    if shift:
+        arret_ber_qs = arret_ber_qs.filter(shift=shift)
+        alerte_base = alerte_base.filter(shift=shift)
+    if date_from:
+        arret_ber_qs = arret_ber_qs.filter(date__gte=date_from)
+        alerte_base = alerte_base.filter(date__gte=date_from)
+    if date_to:
+        arret_ber_qs = arret_ber_qs.filter(date__lte=date_to)
+        alerte_base = alerte_base.filter(date__lte=date_to)
+
+    def _merge_arret_alerte_by_date(arret_qs, alerte_qs):
+        by_date = {}
+        for row in arret_qs.values("date").annotate(total=Sum("temps_arret_min")).order_by("date"):
+            d = row["date"].isoformat()
+            by_date[d] = int(row["total"] or 0)
+        for row in alerte_qs.values("date").annotate(total=Sum("temps_arret_min")).order_by("date"):
+            d = row["date"].isoformat()
+            by_date[d] = by_date.get(d, 0) + int(row["total"] or 0)
+        return by_date
+
+    # Berceau : arrêts module + alertes panne UEP Berceau. CCB : alertes panne UEP CCB uniquement.
+    by_berceau = _merge_arret_alerte_by_date(arret_ber_qs, alerte_base.filter(equipe="Berceau"))
+    by_ccb = _merge_arret_alerte_by_date(ArretBerceau.objects.none(), alerte_base.filter(equipe="CCB"))
+
+    labels = sorted(set(by_berceau) | set(by_ccb))
+    ber_series = [by_berceau.get(d, 0) for d in labels]
+    ccb_series = [by_ccb.get(d, 0) for d in labels]
+    combined = [ber_series[i] + ccb_series[i] for i in range(len(labels))]
+    return JsonResponse(
+        {
+            "labels": labels,
+            "series": {
+                "berceau_minutes": ber_series,
+                "ccb_minutes": ccb_series,
+                "arrets_minutes": combined,
+            },
+            "totals": {
+                "berceau_minutes": sum(ber_series),
+                "ccb_minutes": sum(ccb_series),
+                "arrets_minutes": sum(combined),
+            },
+        }
+    )
+
+
+def api_dashboard_pareto_postes(request):
+    if request.method != "GET":
+        return HttpResponse(status=405)
+    if not auth_can_do_action(request.user, "read"):
+        return json_forbidden()
+
+    shift = (request.GET.get("shift") or "").strip()
+    date_from = (request.GET.get("date_from") or "").strip()
+    date_to = (request.GET.get("date_to") or "").strip()
+    category = (request.GET.get("category") or "").strip().lower()
+    group_by = (request.GET.get("group_by") or "poste").strip().lower()
+    poste_id_raw = (request.GET.get("poste_id") or "").strip()
+    poste_id = None
+    if shift:
+        if shift not in {"A", "B", "N"}:
+            return JsonResponse({"error": "Shift invalide."}, status=400)
+        if not ensure_shift_allowed(request.user, shift, endpoint="api_dashboard_pareto_postes GET"):
+            return json_forbidden()
+    if category and category not in {"maintenance", "kta", "logistique", "fabrication"}:
+        return JsonResponse({"error": "Categorie invalide."}, status=400)
+    if poste_id_raw:
+        if not poste_id_raw.isdigit():
+            return JsonResponse({"error": "poste_id invalide."}, status=400)
+        poste_id = int(poste_id_raw)
+    if group_by not in {"poste", "category", "panne_type"}:
+        return JsonResponse({"error": "group_by invalide."}, status=400)
+    try:
+        hf, ht = _parse_heure_bounds(request)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    arret_qs = restrict_psp_scope(
+        request.user,
+        ArretBerceau.objects.select_related("poste"),
+        shift_field="shift",
+    )
+    alerte_qs = restrict_psp_scope(
+        request.user,
+        AlertePanne.objects.filter(is_deleted=False, equipe="Berceau").select_related("poste"),
+        shift_field="shift",
+        equipe_field="equipe",
+    )
+    if shift:
+        arret_qs = arret_qs.filter(shift=shift)
+        alerte_qs = alerte_qs.filter(shift=shift)
+    if date_from:
+        arret_qs = arret_qs.filter(date__gte=date_from)
+        alerte_qs = alerte_qs.filter(date__gte=date_from)
+    if date_to:
+        arret_qs = arret_qs.filter(date__lte=date_to)
+        alerte_qs = alerte_qs.filter(date__lte=date_to)
+    if category:
+        arret_qs = arret_qs.filter(category=category)
+        alerte_qs = alerte_qs.filter(category=category)
+    if poste_id:
+        arret_qs = arret_qs.filter(poste_id=poste_id)
+        alerte_qs = alerte_qs.filter(poste_id=poste_id)
+    if hf is not None:
+        arret_qs = arret_qs.filter(heure_production__gte=hf)
+        alerte_qs = alerte_qs.filter(heure_production__gte=hf)
+    if ht is not None:
+        arret_qs = arret_qs.filter(heure_production__lte=ht)
+        alerte_qs = alerte_qs.filter(heure_production__lte=ht)
+
+    by_label = {}
+    if group_by == "panne_type":
+        for row in alerte_qs.values("panne_type__name").annotate(total=Sum("temps_arret_min")):
+            name = str(row["panne_type__name"] or "N/A")
+            by_label[name] = by_label.get(name, 0) + int(row["total"] or 0)
+        # Consider "sans type" only for arrets that do not have a matching alerte.
+        # This prevents double counting when an arret already has a typed alert.
+        alerte_keys = set(
+            alerte_qs.values_list(
+                "date",
+                "shift",
+                "heure_production",
+                "module_id",
+                "poste_id",
+                "moyen_id",
+            )
+        )
+        arret_without_type_total = 0
+        for row in arret_qs.values(
+            "date",
+            "shift",
+            "heure_production",
+            "module_id",
+            "poste_id",
+            "moyen_id",
+            "temps_arret_min",
+        ):
+            key = (
+                row["date"],
+                row["shift"],
+                row["heure_production"],
+                row["module_id"],
+                row["poste_id"],
+                row["moyen_id"],
+            )
+            if key not in alerte_keys:
+                arret_without_type_total += int(row["temps_arret_min"] or 0)
+        if arret_without_type_total > 0:
+            by_label["Sans type (arret)"] = by_label.get("Sans type (arret)", 0) + arret_without_type_total
+    else:
+        field_name = "poste__name" if group_by == "poste" else "category"
+        for row in arret_qs.values(field_name).annotate(total=Sum("temps_arret_min")):
+            name = str(row[field_name] or "N/A")
+            by_label[name] = by_label.get(name, 0) + int(row["total"] or 0)
+        for row in alerte_qs.values(field_name).annotate(total=Sum("temps_arret_min")):
+            name = str(row[field_name] or "N/A")
+            by_label[name] = by_label.get(name, 0) + int(row["total"] or 0)
+
+    sorted_rows = sorted(by_label.items(), key=lambda item: (-item[1], item[0]))
+    labels = [name for name, _ in sorted_rows]
+    values = [val for _, val in sorted_rows]
+    total = sum(values) or 1
+    cumulative = []
+    running = 0
+    for v in values:
+        running += v
+        cumulative.append(round((running / total) * 100, 2))
+
+    return JsonResponse(
+        {
+            "labels": labels,
+            "series": {"arrets_minutes": values, "cumulative_percent": cumulative},
+            "totals": {"arrets_minutes": sum(values)},
+            "meta": {"group_by": group_by, "category_filter": category or None, "poste_id": poste_id},
+        }
+    )

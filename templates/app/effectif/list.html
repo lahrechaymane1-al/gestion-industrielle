@@ -1,0 +1,88 @@
+{% extends 'app/base_auth.html' %}
+
+{% block content %}
+<div class="card">
+    <div class="toolbar">
+        <h2>Liste des effectifs{% if equipe_value != 'Berceau' %} - {{ equipe_value }}{% endif %}</h2>
+        <a href="{% url add_url_name %}" class="primary-btn" id="effectifAddBtn" data-target-url="{% url add_url_name %}">Ajouter</a>
+    </div>
+    <form method="get" class="toolbar">
+        <input type="text" name="q" value="{{ query }}" placeholder="Recherche nom/CIN/identifiant/matricule">
+        <input type="text" name="shift" value="{{ request.GET.shift }}" placeholder="Shift">
+        <input type="text" name="type_contrat" value="{{ request.GET.type_contrat }}" placeholder="Contrat">
+        <input type="text" name="sexe" value="{{ request.GET.sexe }}" placeholder="Sexe">
+        <input type="text" name="ville_actuelle" value="{{ request.GET.ville_actuelle }}" placeholder="Ville actuelle">
+        <input type="text" name="specialite" value="{{ request.GET.specialite }}" placeholder="Specialite">
+        <button type="submit" class="secondary-btn">Filtrer</button>
+        <a href="?export=csv" class="secondary-btn">CSV</a>
+        <a href="?export=excel" class="secondary-btn">Excel</a>
+    </form>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Nom complet</th>
+                    <th>CIN</th>
+                    <th>Identifiant</th>
+                    <th>Matricule</th>
+                    <th>Contrat</th>
+                    <th>Shift</th>
+                    <th>Fonction</th>
+                    <th>Ville actuelle</th>
+                    <th>Date entree</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for operator in operators %}
+                    <tr>
+                        <td>{{ operator.nom_complet }}</td>
+                        <td>{{ operator.cin }}</td>
+                        <td>{{ operator.identifiant }}</td>
+                        <td>{{ operator.matricule|default:"—" }}</td>
+                        <td>{{ operator.type_contrat }}</td>
+                        <td>{{ operator.shift }}</td>
+                        <td>{{ operator.fonction }}</td>
+                        <td>{{ operator.ville_actuelle }}</td>
+                        <td>{{ operator.date_entree|date:'Y-m-d' }}</td>
+                        <td>
+                            <a href="{% url detail_url_name operator.pk %}" class="secondary-btn">Detail</a>
+                            <a href="{% url edit_url_name operator.pk %}" class="secondary-btn">Modifier</a>
+                            <form method="post" action="{% url delete_url_name operator.pk %}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="secondary-btn">Supprimer</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="10" class="muted">Aucun collaborateur enregistre.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if operators.paginator.num_pages > 1 %}
+        <div class="toolbar">
+            {% if operators.has_previous %}
+                <a class="secondary-btn" href="?page={{ operators.previous_page_number }}">Precedent</a>
+            {% endif %}
+            <span>Page {{ operators.number }} / {{ operators.paginator.num_pages }}</span>
+            {% if operators.has_next %}
+                <a class="secondary-btn" href="?page={{ operators.next_page_number }}">Suivant</a>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+<script>
+(() => {
+    const addBtn = document.getElementById("effectifAddBtn");
+    if (!addBtn) return;
+    addBtn.addEventListener("click", (event) => {
+        const targetUrl = addBtn.dataset.targetUrl || addBtn.getAttribute("href");
+        if (!targetUrl) return;
+        event.preventDefault();
+        window.location.assign(targetUrl);
+    });
+})();
+</script>
+{% endblock %}

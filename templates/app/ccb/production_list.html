@@ -1,0 +1,81 @@
+{% extends 'app/base_auth.html' %}
+
+{% block content %}
+<div class="card">
+    <div class="toolbar theme-flex theme-flex-toolbar">
+        <form method="get" class="inline-form theme-flex">
+            <label for="shiftFilter">Filtrer par shift</label>
+            <select name="shift" id="shiftFilter">
+                <option value="">Tous</option>
+                {% for value, label in shift_choices %}
+                    <option value="{{ value }}" {% if value == shift_filter %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="secondary-btn">Filtrer</button>
+        </form>
+        <input type="text" id="tableSearch" placeholder="Recherche dans le tableau...">
+        <form method="get" action="{% url 'ccb_production_export' %}" class="inline-form export-form theme-flex">
+            <input type="hidden" name="shift" value="{{ shift_filter }}">
+            <label for="exportFormat">Exporter</label>
+            <select name="format" id="exportFormat" required>
+                <option value="excel">Excel (.xlsx)</option>
+                <option value="pdf">PDF (.pdf)</option>
+            </select>
+            <button type="submit" class="secondary-btn">Exporter</button>
+        </form>
+        <a class="primary-btn" href="{% url 'ccb_production_add' %}">Ajouter une production CCB</a>
+    </div>
+
+    <div class="table-wrap">
+        <table id="productionTable" class="sortable">
+            <thead>
+                <tr>
+                    <th data-sort="date">Date</th>
+                    <th data-sort="shift">Shift</th>
+                    {% for h in "12345678"|make_list %}
+                    <th>H{{ h }} vol.</th>
+                    <th>H{{ h }} reb.</th>
+                    {% endfor %}
+                    <th data-sort="objectif">Objectif</th>
+                    <th data-sort="volume">Volume</th>
+                    <th data-sort="rebut">Rebut</th>
+                    <th data-sort="ro">RO (%)</th>
+                    <th data-sort="temps">Temps d'arrets</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in productions %}
+                    <tr>
+                        <td>{{ p.date|date:'Y-m-d' }}</td>
+                        <td>{{ p.shift }}</td>
+                        <td>{{ p.production_h1 }}</td><td>{{ p.rebut_h1 }}</td>
+                        <td>{{ p.production_h2 }}</td><td>{{ p.rebut_h2 }}</td>
+                        <td>{{ p.production_h3 }}</td><td>{{ p.rebut_h3 }}</td>
+                        <td>{{ p.production_h4 }}</td><td>{{ p.rebut_h4 }}</td>
+                        <td>{{ p.production_h5 }}</td><td>{{ p.rebut_h5 }}</td>
+                        <td>{{ p.production_h6 }}</td><td>{{ p.rebut_h6 }}</td>
+                        <td>{{ p.production_h7 }}</td><td>{{ p.rebut_h7 }}</td>
+                        <td>{{ p.production_h8 }}</td><td>{{ p.rebut_h8 }}</td>
+                        <td>{{ p.objectif }}</td>
+                        <td>{{ p.volume }}</td>
+                        <td>{{ p.rebut }}</td>
+                        <td>{{ p.ro_percent }}</td>
+                        <td>{{ p.temps_arrets }}</td>
+                        <td>
+                            <a href="{% url 'ccb_production_detail' p.pk %}" class="secondary-btn">Detail</a>
+                            <a href="{% url 'ccb_production_edit' p.pk %}" class="secondary-btn">Modifier</a>
+                            <form method="post" action="{% url 'ccb_production_delete' p.pk %}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="secondary-btn">Supprimer</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="26" class="muted">Aucune production CCB enregistree.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

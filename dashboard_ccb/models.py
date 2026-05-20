@@ -1,0 +1,2 @@
+"""CCB dashboard models placeholder."""
+

@@ -1,0 +1,2 @@
+"""CCB arret models placeholder."""
+

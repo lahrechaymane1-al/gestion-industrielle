@@ -1,0 +1,33 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>Gestion industrielle</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    {% for css in vite_css %}
+    <link rel="stylesheet" href="{% static css %}?v={{ vite_cache_bust }}">
+    {% empty %}
+    {% endfor %}
+</head>
+<body>
+    <div id="root"></div>
+    {% if vite_js %}
+    <script type="module" src="{% static vite_js %}?v={{ vite_cache_bust }}"></script>
+    {% else %}
+    <div style="font-family:system-ui;padding:2rem;max-width:520px;margin:auto;">
+        <h1>Interface React</h1>
+        <p>Les fichiers statiques ne sont pas encore construits.</p>
+        <p>Dans le dossier <code>frontend</code>, executez:</p>
+        <pre style="background:#f4f4f4;padding:1rem;">npm install
+npm run build</pre>
+        <p>Puis rechargez cette page.</p>
+        <p><a href="{% url 'home' %}">Retour accueil</a></p>
+    </div>
+    {% endif %}
+</body>
+</html>

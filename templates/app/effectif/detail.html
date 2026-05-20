@@ -1,0 +1,34 @@
+{% extends 'app/base_auth.html' %}
+
+{% block content %}
+<div class="card">
+    <h2>{{ page_title }}</h2>
+    <div class="table-wrap">
+        <table>
+            <tbody>
+                <tr><th>Nom complet</th><td>{{ operator.nom_complet }}</td></tr>
+                <tr><th>Shift</th><td>{{ operator.shift }}</td></tr>
+                <tr><th>CIN</th><td>{{ operator.cin }}</td></tr>
+                <tr><th>Type contrat</th><td>{{ operator.type_contrat }}</td></tr>
+                <tr><th>Date naissance</th><td>{{ operator.date_naissance|date:'Y-m-d' }}</td></tr>
+                <tr><th>Sexe</th><td>{{ operator.sexe }}</td></tr>
+                <tr><th>Date entree</th><td>{{ operator.date_entree|date:'Y-m-d' }}</td></tr>
+                <tr><th>Identifiant</th><td>{{ operator.identifiant }}</td></tr>
+                <tr><th>Matricule</th><td>{{ operator.matricule|default:"—" }}</td></tr>
+                <tr><th>Telephone</th><td>{{ operator.num_tel }}</td></tr>
+                <tr><th>Fonction</th><td>{{ operator.fonction }}</td></tr>
+                <tr><th>Ville actuelle</th><td>{{ operator.ville_actuelle }}</td></tr>
+                <tr><th>Niveau etude</th><td>{{ operator.niveau_etude }}</td></tr>
+                <tr><th>Numero casier</th><td>{{ operator.numero_casier }}</td></tr>
+                <tr><th>Parada transport</th><td>{{ operator.parada_transport }}</td></tr>
+                <tr><th>Pointure chaussure</th><td>{{ operator.pointure_chaussure }}</td></tr>
+                <tr><th>Specialite</th><td>{{ operator.specialite }}</td></tr>
+                <tr><th>Taille pantalon</th><td>{{ operator.taille_pantalon }}</td></tr>
+                <tr><th>Taille veste</th><td>{{ operator.taille_veste }}</td></tr>
+                <tr><th>Ville origine</th><td>{{ operator.ville_origine }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <a href="{% url return_url_name %}" class="secondary-btn">Retour</a>
+</div>
+{% endblock %}

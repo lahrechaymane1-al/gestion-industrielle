@@ -1,0 +1,249 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <title>Connexion - Gestion Industrielle</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #0b1120;
+            --slate: #141c2e;
+            --slate-light: #1a2538;
+            --sky: #38bdf8;
+            --sky-soft: #7dd3fc;
+            --amber: #fbbf24;
+            --text: #f8fafc;
+            --muted: rgba(148, 163, 184, 0.95);
+            --border: rgba(248, 250, 252, 0.09);
+            --border-strong: rgba(56, 189, 248, 0.35);
+            --surface: rgba(20, 28, 46, 0.72);
+            --elevated: rgba(26, 37, 56, 0.88);
+            --accent-dim: rgba(56, 189, 248, 0.12);
+            --amber-dim: rgba(251, 191, 36, 0.1);
+            --btn-text: #0b1120;
+            --focus: rgba(56, 189, 248, 0.42);
+            --shadow-dialog: 0 28px 72px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(56, 189, 248, 0.18), 0 0 64px rgba(56, 189, 248, 0.14);
+            --glow: 0 8px 32px rgba(56, 189, 248, 0.32), 0 0 20px rgba(56, 189, 248, 0.1);
+        }
+
+        * { box-sizing: border-box; }
+
+        @keyframes loginFadeUp {
+            from { opacity: 0; transform: translate3d(0, 14px, 0); }
+            to { opacity: 1; transform: translate3d(0, 0, 0); }
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Plus Jakarta Sans", "Inter", "Segoe UI", system-ui, sans-serif;
+            color: var(--text);
+            background-color: var(--ink);
+            background-image:
+                radial-gradient(ellipse 90% 55% at 50% -15%, rgba(56, 189, 248, 0.14), transparent 52%),
+                radial-gradient(ellipse 65% 45% at 100% 10%, rgba(34, 211, 238, 0.08), transparent 48%),
+                linear-gradient(180deg, var(--slate-light) 0%, var(--slate) 46%, var(--ink) 100%);
+            background-attachment: fixed;
+            display: grid;
+            place-items: center;
+            padding: 2rem 1rem;
+        }
+
+        .login-shell {
+            width: 100%;
+            max-width: 960px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            border-radius: 16px;
+            overflow: hidden;
+            background: var(--surface);
+            backdrop-filter: blur(22px) saturate(165%);
+            -webkit-backdrop-filter: blur(22px) saturate(165%);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-dialog);
+            animation: loginFadeUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        .login-brand {
+            padding: 2.5rem 2rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 1rem;
+            background: linear-gradient(160deg, var(--accent-dim) 0%, var(--amber-dim) 40%, rgba(20, 28, 46, 0.35) 100%);
+            border-right: 1px solid var(--border);
+        }
+
+        .login-brand h1 {
+            margin: 0;
+            font-size: clamp(1.5rem, 2.4vw, 2rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+        }
+
+        .login-brand p {
+            margin: 0;
+            color: var(--muted);
+            max-width: 36ch;
+            line-height: 1.6;
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+
+        .logo-mark {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--sky) 0%, var(--sky-soft) 50%, var(--amber) 120%);
+            color: var(--btn-text);
+            font-weight: 800;
+            font-size: 0.9rem;
+            display: grid;
+            place-items: center;
+            box-shadow: var(--glow);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            margin-bottom: 0.25rem;
+            transition: transform 0.2s ease, box-shadow 0.25s ease;
+        }
+
+        .logo-mark:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 36px rgba(56, 189, 248, 0.35);
+        }
+
+        .login-panel {
+            padding: 2.5rem 2rem;
+            display: flex;
+            align-items: center;
+            background: var(--elevated);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        .login-card { width: 100%; }
+
+        .login-card h2 {
+            margin: 0;
+            font-size: 1.45rem;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+        }
+
+        .muted {
+            margin: 0.4rem 0 1.25rem;
+            color: var(--muted);
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        .field { margin-bottom: 1rem; }
+
+        label {
+            display: inline-block;
+            margin-bottom: 0.35rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 0.75rem 0.9rem;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font: inherit;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+            background: rgba(11, 17, 32, 0.55);
+            color: var(--text);
+        }
+
+        input:hover {
+            background: rgba(20, 28, 46, 0.75);
+            border-color: rgba(248, 250, 252, 0.14);
+        }
+
+        input:focus {
+            border-color: var(--border-strong);
+            background: rgba(26, 37, 56, 0.85);
+            box-shadow: 0 0 0 3px var(--focus), 0 0 20px rgba(56, 189, 248, 0.12);
+        }
+
+        .primary-btn {
+            width: 100%;
+            margin-top: 0.5rem;
+            border: none;
+            border-radius: 10px;
+            padding: 0.65rem 1rem;
+            min-height: 40px;
+            font: inherit;
+            font-weight: 600;
+            background: var(--sky);
+            color: var(--btn-text);
+            cursor: pointer;
+            box-shadow: var(--glow);
+            transition: transform 0.18s ease, filter 0.2s ease, box-shadow 0.22s ease;
+        }
+
+        .primary-btn:hover {
+            filter: brightness(1.06);
+            box-shadow: 0 12px 36px rgba(56, 189, 248, 0.38);
+            transform: translateY(-1px);
+        }
+
+        .error-text {
+            margin: 0.5rem 0;
+            color: #fb7185;
+            background: rgba(251, 113, 133, 0.1);
+            border: 1px solid rgba(251, 113, 133, 0.28);
+            border-radius: 10px;
+            padding: 0.6rem 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        @media (max-width: 800px) {
+            .login-shell { grid-template-columns: 1fr; max-width: 420px; }
+            .login-brand { border-right: none; border-bottom: 1px solid var(--border); }
+        }
+    </style>
+</head>
+<body>
+    <section class="login-shell">
+        <aside class="login-brand">
+            <div class="logo-mark" aria-hidden="true">GI</div>
+            <h1>Gestion industrielle</h1>
+            <p>Suivi production, absences, effectifs et mode dégradé pour Berceau et CCB.</p>
+        </aside>
+        <div class="login-panel">
+            <div class="login-card">
+                <h2>Connexion</h2>
+                <p class="muted">Accédez à votre espace sécurisé.</p>
+                <form method="post" id="loginForm" novalidate>
+                    {% csrf_token %}
+                    <div class="field">
+                        <label for="id_identifiant">Identifiant</label>
+                        <input id="id_identifiant" type="text" name="identifiant" value="{{ request.POST.identifiant|default:'' }}" autocomplete="username" required>
+                    </div>
+                    <div class="field">
+                        <label for="id_code">Code</label>
+                        <input id="id_code" type="password" name="code" autocomplete="current-password" required>
+                    </div>
+                    {% if messages %}
+                        {% for message in messages %}
+                            <p class="error-text">{{ message }}</p>
+                        {% endfor %}
+                    {% endif %}
+                    <button type="submit" class="primary-btn">Se connecter</button>
+                </form>
+            </div>
+        </div>
+    </section>
+</body>
+</html>

@@ -1,0 +1,109 @@
+{
+  "year": 2026,
+  "entries": [
+    {"date": "2026-05-01", "shift": "N", "line": "A1", "volume": 211},
+    {"date": "2026-05-01", "shift": "N", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-02", "shift": "A", "line": "A1", "volume": 272},
+    {"date": "2026-05-02", "shift": "A", "line": "A3", "volume": 0},
+    {"date": "2026-05-02", "shift": "B", "line": "A1", "volume": 279},
+    {"date": "2026-05-02", "shift": "B", "line": "A3", "volume": 0},
+    {"date": "2026-05-02", "shift": "N", "line": "A1", "volume": 114},
+    {"date": "2026-05-02", "shift": "N", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-03", "shift": "A", "line": "A1", "volume": 41},
+    {"date": "2026-05-03", "shift": "A", "line": "A3", "volume": 0},
+    {"date": "2026-05-03", "shift": "B", "line": "A1", "volume": 210},
+    {"date": "2026-05-03", "shift": "B", "line": "A3", "volume": 0},
+    {"date": "2026-05-03", "shift": "N", "line": "A1", "volume": 259},
+    {"date": "2026-05-03", "shift": "N", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-04", "shift": "A", "line": "A1", "volume": 272},
+    {"date": "2026-05-04", "shift": "A", "line": "A3", "volume": 0},
+    {"date": "2026-05-04", "shift": "B", "line": "A1", "volume": 244},
+    {"date": "2026-05-04", "shift": "B", "line": "A3", "volume": 0},
+    {"date": "2026-05-04", "shift": "N", "line": "A1", "volume": 259},
+    {"date": "2026-05-04", "shift": "N", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-05", "shift": "A", "line": "A1", "volume": 241},
+    {"date": "2026-05-05", "shift": "A", "line": "A3", "volume": 0},
+    {"date": "2026-05-05", "shift": "B", "line": "A1", "volume": 250},
+    {"date": "2026-05-05", "shift": "B", "line": "A3", "volume": 0},
+    {"date": "2026-05-05", "shift": "N", "line": "A1", "volume": 251},
+    {"date": "2026-05-05", "shift": "N", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-06", "shift": "A", "line": "A1", "volume": 132},
+    {"date": "2026-05-06", "shift": "A", "line": "A3", "volume": 0},
+    {"date": "2026-05-06", "shift": "B", "line": "A1", "volume": 186},
+    {"date": "2026-05-06", "shift": "B", "line": "A3", "volume": 0},
+    {"date": "2026-05-06", "shift": "N", "line": "A1", "volume": 266},
+    {"date": "2026-05-06", "shift": "N", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-07", "shift": "A", "line": "A1", "volume": 270},
+    {"date": "2026-05-07", "shift": "A", "line": "A3", "volume": 0},
+    {"date": "2026-05-07", "shift": "B", "line": "A1", "volume": 220},
+    {"date": "2026-05-07", "shift": "B", "line": "A3", "volume": 0},
+    {"date": "2026-05-07", "shift": "N", "line": "A1", "volume": 246},
+    {"date": "2026-05-07", "shift": "N", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-08", "shift": "A", "line": "A1", "volume": 226},
+    {"date": "2026-05-08", "shift": "A", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-09", "shift": "A", "line": "A1", "volume": 145},
+    {"date": "2026-05-09", "shift": "A", "line": "A3", "volume": 0},
+    {"date": "2026-05-09", "shift": "B", "line": "A1", "volume": 227},
+    {"date": "2026-05-09", "shift": "B", "line": "A3", "volume": 0},
+    {"date": "2026-05-09", "shift": "N", "line": "A1", "volume": 254},
+    {"date": "2026-05-09", "shift": "N", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-10", "shift": "A", "line": "A1", "volume": 216},
+    {"date": "2026-05-10", "shift": "A", "line": "A3", "volume": 0},
+    {"date": "2026-05-10", "shift": "B", "line": "A1", "volume": 238},
+    {"date": "2026-05-10", "shift": "B", "line": "A3", "volume": 0},
+    {"date": "2026-05-10", "shift": "N", "line": "A1", "volume": 230},
+    {"date": "2026-05-10", "shift": "N", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-11", "shift": "A", "line": "A1", "volume": 0},
+    {"date": "2026-05-11", "shift": "A", "line": "A3", "volume": 206},
+    {"date": "2026-05-11", "shift": "B", "line": "A1", "volume": 47},
+    {"date": "2026-05-11", "shift": "B", "line": "A3", "volume": 141},
+    {"date": "2026-05-11", "shift": "N", "line": "A1", "volume": 0},
+    {"date": "2026-05-11", "shift": "N", "line": "A3", "volume": 194},
+
+    {"date": "2026-05-12", "shift": "A", "line": "A1", "volume": 97},
+    {"date": "2026-05-12", "shift": "A", "line": "A3", "volume": 24},
+    {"date": "2026-05-12", "shift": "B", "line": "A1", "volume": 0},
+    {"date": "2026-05-12", "shift": "B", "line": "A3", "volume": 195},
+    {"date": "2026-05-12", "shift": "N", "line": "A1", "volume": 0},
+    {"date": "2026-05-12", "shift": "N", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-13", "shift": "A", "line": "A1", "volume": 0},
+    {"date": "2026-05-13", "shift": "A", "line": "A3", "volume": 0},
+    {"date": "2026-05-13", "shift": "B", "line": "A1", "volume": 20},
+    {"date": "2026-05-13", "shift": "B", "line": "A3", "volume": 0},
+    {"date": "2026-05-13", "shift": "N", "line": "A1", "volume": 252},
+    {"date": "2026-05-13", "shift": "N", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-14", "shift": "A", "line": "A1", "volume": 250},
+    {"date": "2026-05-14", "shift": "A", "line": "A3", "volume": 0},
+    {"date": "2026-05-14", "shift": "B", "line": "A1", "volume": 242},
+    {"date": "2026-05-14", "shift": "B", "line": "A3", "volume": 0},
+    {"date": "2026-05-14", "shift": "N", "line": "A1", "volume": 248},
+    {"date": "2026-05-14", "shift": "N", "line": "A3", "volume": 0},
+
+    {"date": "2026-05-15", "shift": "A", "line": "A1", "volume": 0},
+    {"date": "2026-05-15", "shift": "A", "line": "A3", "volume": 210},
+    {"date": "2026-05-15", "shift": "B", "line": "A1", "volume": 50},
+    {"date": "2026-05-15", "shift": "B", "line": "A3", "volume": 105},
+    {"date": "2026-05-15", "shift": "N", "line": "A1", "volume": 0},
+    {"date": "2026-05-15", "shift": "N", "line": "A3", "volume": 215},
+
+    {"date": "2026-05-16", "shift": "A", "line": "A1", "volume": 0},
+    {"date": "2026-05-16", "shift": "A", "line": "A3", "volume": 184},
+    {"date": "2026-05-16", "shift": "B", "line": "A1", "volume": 0},
+    {"date": "2026-05-16", "shift": "B", "line": "A3", "volume": 215},
+
+    {"date": "2026-05-17", "shift": "N", "line": "A1", "volume": 0},
+    {"date": "2026-05-17", "shift": "N", "line": "A3", "volume": 197}
+  ]
+}

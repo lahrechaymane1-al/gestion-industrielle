@@ -1,0 +1,37 @@
+{% extends 'app/base_auth.html' %}
+
+{% block content %}
+<div class="card">
+    <h2>Detail production CCB</h2>
+    <p><strong>Date:</strong> {{ production.date|date:'Y-m-d' }}</p>
+    <p><strong>Shift:</strong> {{ production.shift }}</p>
+    <p><strong>Objectif (shift):</strong> {{ production.objectif }}</p>
+    <p><strong>Volume total:</strong> {{ production.volume }}</p>
+    <p><strong>Rebut total:</strong> {{ production.rebut }}</p>
+    <p><strong>RO:</strong> {{ production.ro_percent }}%</p>
+    <p><strong>Temps d'arrets:</strong> {{ production.temps_arrets }}</p>
+    <h3>Par heure</h3>
+    <table class="sortable">
+        <thead>
+            <tr>
+                <th>Heure</th>
+                <th>Objectif</th>
+                <th>Volume</th>
+                <th>Rebut</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>H1</td><td>20</td><td>{{ production.production_h1 }}</td><td>{{ production.rebut_h1 }}</td></tr>
+            <tr><td>H2</td><td>20</td><td>{{ production.production_h2 }}</td><td>{{ production.rebut_h2 }}</td></tr>
+            <tr><td>H3</td><td>20</td><td>{{ production.production_h3 }}</td><td>{{ production.rebut_h3 }}</td></tr>
+            <tr><td>H4</td><td>20</td><td>{{ production.production_h4 }}</td><td>{{ production.rebut_h4 }}</td></tr>
+            <tr><td>H5</td><td>11</td><td>{{ production.production_h5 }}</td><td>{{ production.rebut_h5 }}</td></tr>
+            <tr><td>H6</td><td>20</td><td>{{ production.production_h6 }}</td><td>{{ production.rebut_h6 }}</td></tr>
+            <tr><td>H7</td><td>20</td><td>{{ production.production_h7 }}</td><td>{{ production.rebut_h7 }}</td></tr>
+            <tr><td>H8</td><td>20</td><td>{{ production.production_h8 }}</td><td>{{ production.rebut_h8 }}</td></tr>
+        </tbody>
+    </table>
+    <p class="muted" style="margin-top:1rem;">Les objectifs horaires sont fixes (20,20,20,20,11,20,20,20).</p>
+    <a href="{% url 'ccb_production' %}" class="secondary-btn">Retour</a>
+</div>
+{% endblock %}

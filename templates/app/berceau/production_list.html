@@ -1,0 +1,70 @@
+{% extends 'app/base_auth.html' %}
+
+{% block content %}
+<div class="card">
+    <div class="toolbar theme-flex theme-flex-toolbar">
+        <form method="get" class="inline-form theme-flex" id="lineFilterForm">
+            <label for="lineFilter">Filtrer par diversité</label>
+            <select name="line" id="lineFilter">
+                <option value="">Toutes</option>
+                {% for value, label in line_choices %}
+                    <option value="{{ value }}" {% if value == line_filter %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <input type="text" id="tableSearch" placeholder="Recherche dans le tableau...">
+        <form method="get" action="{% url 'berceau_production_export' %}" class="inline-form export-form theme-flex">
+            <input type="hidden" name="line" value="{{ line_filter }}">
+            <label for="exportFormat">Exporter</label>
+            <select name="format" id="exportFormat" required>
+                <option value="excel">Excel (.xlsx)</option>
+                <option value="pdf">PDF (.pdf)</option>
+            </select>
+            <button type="submit" class="secondary-btn">Exporter</button>
+        </form>
+        <a class="primary-btn" href="{% url 'berceau_production_add' %}">Ajouter une production</a>
+    </div>
+
+    <div class="table-wrap">
+        <table id="productionTable" class="sortable">
+            <thead>
+                <tr>
+                    <th data-sort="date">Date</th>
+                    <th data-sort="line">Diversité</th>
+                    <th>Heure</th>
+                    <th data-sort="shift">Shift</th>
+                    <th data-sort="objectif">Objectif</th>
+                    <th>Objectif heure</th>
+                    <th>Production heure</th>
+                    <th data-sort="rebut">Rebut</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in hourly_rows %}
+                    <tr>
+                        <td>{{ row.production.date|date:'Y-m-d' }}</td>
+                        <td>{{ row.production.line }}</td>
+                        <td>H{{ row.hour }}</td>
+                        <td>{{ row.production.shift }}</td>
+                        <td>{{ row.production.objectif }}</td>
+                        <td>{{ row.objectif_value }}</td>
+                        <td>{{ row.production_value }}</td>
+                        <td>{{ row.production.rebut }}</td>
+                        <td>
+                            <a href="{% url 'berceau_production_detail' row.production.pk %}" class="secondary-btn">Detail</a>
+                            <a href="{% url 'berceau_production_edit' row.production.pk %}" class="secondary-btn">Modifier</a>
+                            <form method="post" action="{% url 'berceau_production_delete' row.production.pk %}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="secondary-btn">Supprimer</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="9" class="muted">Aucune production enregistree.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

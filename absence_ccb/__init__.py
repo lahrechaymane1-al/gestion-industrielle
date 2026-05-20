@@ -1,0 +1,2 @@
+"""CCB absence app."""
+

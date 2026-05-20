@@ -1,0 +1,2 @@
+"""Berceau dashboard models placeholder."""
+

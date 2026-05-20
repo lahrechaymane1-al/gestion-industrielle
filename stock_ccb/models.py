@@ -1,0 +1,2 @@
+"""CCB stock models placeholder."""
+

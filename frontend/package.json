@@ -1,0 +1,52 @@
+{
+  "name": "gestion-industrielle-ui",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:django": "npm run build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "lint:css": "stylelint \"../static/**/*.css\"",
+    "lint:all": "npm run lint && npm run lint:css",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.13.5",
+    "@emotion/styled": "^11.13.5",
+    "@hookform/resolvers": "^3.9.1",
+    "@mui/icons-material": "^6.3.0",
+    "@mui/material": "^6.3.0",
+    "@mui/x-date-pickers": "^7.22.3",
+    "@tanstack/react-query": "^5.62.8",
+    "axios": "^1.7.9",
+    "dayjs": "^1.11.20",
+    "framer-motion": "^11.18.2",
+    "html2canvas": "^1.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.54.2",
+    "react-router-dom": "^7.1.1",
+    "recharts": "^3.8.1",
+    "xlsx": "^0.18.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.16",
+    "globals": "^15.14.0",
+    "stylelint": "^17.11.0",
+    "stylelint-config-standard": "^40.0.0",
+    "typescript": "~5.6.2",
+    "typescript-eslint": "^8.18.2",
+    "vite": "^6.0.5",
+    "vitest": "^3.0.5"
+  }
+}

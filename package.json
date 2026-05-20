@@ -1,0 +1,12 @@
+{
+  "name": "industrial_management",
+  "private": true,
+  "workspaces": ["frontend"],
+  "scripts": {
+    "build": "npm run build --workspace gestion-industrielle-ui",
+    "dev": "npm run dev --workspace gestion-industrielle-ui",
+    "preview": "npm run preview --workspace gestion-industrielle-ui",
+    "lint": "npm run lint --workspace gestion-industrielle-ui",
+    "test": "npm run test --workspace gestion-industrielle-ui"
+  }
+}

@@ -1,0 +1,2 @@
+"""CCB stock app."""
+

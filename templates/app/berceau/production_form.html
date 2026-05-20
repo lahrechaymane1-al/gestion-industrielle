@@ -1,0 +1,42 @@
+{% extends 'app/base_auth.html' %}
+
+{% block content %}
+<div class="card form-card">
+    <h2>{{ page_title }}</h2>
+    <form method="post" class="form-grid">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <div class="error-text">{{ form.non_field_errors }}</div>
+        {% endif %}
+        <div class="field"><label for="{{ form.date.id_for_label }}">{{ form.date.label }}</label>{{ form.date }}</div>
+        <div class="field"><label for="{{ form.line.id_for_label }}">{{ form.line.label }}</label>{{ form.line }}</div>
+        <div class="field"><label for="{{ form.shift.id_for_label }}">{{ form.shift.label }}</label>{{ form.shift }}</div>
+        <div class="field"><label for="{{ form.objectif.id_for_label }}">{{ form.objectif.label }}</label>{{ form.objectif }}</div>
+        <div class="field"><label for="{{ form.rebut.id_for_label }}">{{ form.rebut.label }}</label>{{ form.rebut }}</div>
+
+        <div class="card" style="grid-column: 1 / -1;">
+            <h3>Saisie horaire (H1 a H8)</h3>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Heure</th><th>Production</th><th>Objectif</th></tr></thead>
+                    <tbody>
+                        <tr><td>H1</td><td>{{ form.production_h1 }}</td><td>{{ form.objectif_h1 }}</td></tr>
+                        <tr><td>H2</td><td>{{ form.production_h2 }}</td><td>{{ form.objectif_h2 }}</td></tr>
+                        <tr><td>H3</td><td>{{ form.production_h3 }}</td><td>{{ form.objectif_h3 }}</td></tr>
+                        <tr><td>H4</td><td>{{ form.production_h4 }}</td><td>{{ form.objectif_h4 }}</td></tr>
+                        <tr><td>H5</td><td>{{ form.production_h5 }}</td><td>{{ form.objectif_h5 }}</td></tr>
+                        <tr><td>H6</td><td>{{ form.production_h6 }}</td><td>{{ form.objectif_h6 }}</td></tr>
+                        <tr><td>H7</td><td>{{ form.production_h7 }}</td><td>{{ form.objectif_h7 }}</td></tr>
+                        <tr><td>H8</td><td>{{ form.production_h8 }}</td><td>{{ form.objectif_h8 }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button class="primary-btn" type="submit">Enregistrer</button>
+            <a href="{% url 'berceau_production_list' %}" class="secondary-btn">Annuler</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

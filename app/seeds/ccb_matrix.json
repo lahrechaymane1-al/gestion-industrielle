@@ -1,0 +1,63 @@
+{
+  "module_name": "CCB",
+  "postes": [
+    {
+      "name": "OP10 A",
+      "moyens": [
+        "ROBOT R01",
+        "ROBOT R02",
+        "GENERATEUR SKS R01",
+        "GENERATEUR SKS R02",
+        "LHD MSR 01",
+        "LHD MSR 02",
+        "RHD MSR 01",
+        "RHD MSR 02",
+        "ARMOIRE ELEC",
+        "CONVOYEUR EXT",
+        "CONVOYEUR INT",
+        "PORTE"
+      ]
+    },
+    {
+      "name": "OP10 B",
+      "moyens": [
+        "ROBOT R01",
+        "ROBOT R02",
+        "GENERATEUR SKS R01",
+        "GENERATEUR SKS R02",
+        "LHD MSR 01",
+        "LHD MSR 02",
+        "RHD MSR 01",
+        "RHD MSR 02",
+        "ARMOIRE ELEC",
+        "CONVOYEUR EXT",
+        "CONVOYEUR INT",
+        "PORTE"
+      ]
+    },
+    {
+      "name": "OP20",
+      "moyens": [
+        "ROBOT R01",
+        "ROBOT R02",
+        "ROBOT R03",
+        "GENERATEUR SKS R01",
+        "GENERATEUR SKS R02",
+        "GENERATEUR SKS R03",
+        "LHD MSR 01",
+        "LHD MSR 02",
+        "ARMOIRE ELEC",
+        "CONVOYEUR EXT",
+        "PORTE"
+      ]
+    },
+    {
+      "name": "OP30 A",
+      "moyens": ["GENRATEUR", "MRS RETOUCHE", "ARMOIRE ELEC", "MANIPULATEUR"]
+    },
+    {
+      "name": "OP30 B",
+      "moyens": ["GENRATEUR", "MRS RETOUCHE", "ARMOIRE ELEC", "MANIPULATEUR"]
+    }
+  ]
+}

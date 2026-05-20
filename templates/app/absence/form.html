@@ -1,0 +1,78 @@
+{% extends 'app/base_auth.html' %}
+
+{% block content %}
+<div class="card form-card absence-form">
+    <h2>{{ page_title }}</h2>
+    <form method="post" class="form-grid">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <div class="error-text">{{ form.non_field_errors }}</div>
+        {% endif %}
+        {% for field in form %}
+            <div class="field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}
+                    <span class="error-text">{{ field.errors|join:', ' }}</span>
+                {% endif %}
+            </div>
+        {% endfor %}
+        <div class="form-actions">
+            <button class="primary-btn" id="absenceSubmitBtn" type="submit">Enregistrer</button>
+            <a href="{% url return_url_name %}" class="secondary-btn">Annuler</a>
+        </div>
+    </form>
+</div>
+<script>
+(() => {
+    const form = document.querySelector(".absence-form form");
+    const submitBtn = document.getElementById("absenceSubmitBtn");
+    const absentSelect = document.getElementById("id_effectif");
+    const nomCompletInput = document.getElementById("id_nom_complet");
+    const motifInput = document.getElementById("id_motif");
+    const remplacantSelect = document.getElementById("id_remplacant_effectif");
+    const remplacantInput = document.getElementById("id_remplacant");
+    const dateInput = document.getElementById("id_date_absence");
+    if (!form || !submitBtn || !absentSelect || !motifInput || !dateInput) return;
+
+    function normalize(input) {
+        input.value = (input.value || "").replace(/\s+/g, " ").trim();
+    }
+
+    function validate() {
+        normalize(motifInput);
+        if (remplacantInput) normalize(remplacantInput);
+        const hasEffectif = !!absentSelect.value;
+        const hasNom = !!(nomCompletInput && nomCompletInput.value.trim());
+        if (nomCompletInput) {
+            nomCompletInput.setCustomValidity(hasEffectif || hasNom ? "" : "Le nom complet est obligatoire.");
+        }
+        absentSelect.setCustomValidity(hasEffectif || hasNom ? "" : "Personne absente obligatoire.");
+        motifInput.setCustomValidity(motifInput.value ? "" : "Motif obligatoire.");
+        if (dateInput.value) {
+            const dt = new Date(dateInput.value);
+            dateInput.setCustomValidity(Number.isNaN(dt.getTime()) ? "Date invalide." : "");
+        } else {
+            dateInput.setCustomValidity("Date absence obligatoire.");
+        }
+        if (remplacantSelect && remplacantSelect.value && remplacantSelect.value === absentSelect.value) {
+            remplacantSelect.setCustomValidity("Le remplacant doit etre different de la personne absente.");
+        } else if (remplacantSelect) {
+            remplacantSelect.setCustomValidity("");
+        }
+        if (remplacantSelect && remplacantInput && remplacantSelect.value && remplacantInput.value) {
+            remplacantInput.setCustomValidity("Choisir un remplacant effectif OU saisir un remplacant externe.");
+        } else if (remplacantSelect && remplacantInput && !remplacantSelect.value && !remplacantInput.value.trim()) {
+            remplacantInput.setCustomValidity("Le remplacant est obligatoire.");
+        } else if (remplacantInput) {
+            remplacantInput.setCustomValidity("");
+        }
+        submitBtn.disabled = !form.checkValidity();
+    }
+
+    form.addEventListener("input", validate);
+    form.addEventListener("blur", validate, true);
+    validate();
+})();
+</script>
+{% endblock %}

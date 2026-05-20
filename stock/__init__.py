@@ -1,0 +1,2 @@
+"""Berceau stock app."""
+

@@ -1,0 +1,2 @@
+"""CCB mode degrade app."""
+

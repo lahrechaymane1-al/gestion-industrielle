@@ -1,0 +1,33 @@
+{% extends 'app/base_auth.html' %}
+{% load static %}
+
+{% block content %}
+<section class="welcome-strip card">
+    <h2>Bienvenue sur la plateforme industrielle</h2>
+    <p class="muted">Selectionnez un domaine pour commencer: Berceau ou CCB.</p>
+    <p style="margin-top:1rem;">
+        <a href="{% url 'react_app' %}" class="primary-btn">Interface React (recommandee)</a>
+    </p>
+</section>
+
+<div class="photo-board">
+    <div class="photo-card hover-lift">
+        <div class="photo-head">
+            <h3>Berceau</h3>
+            <a href="{% url 'berceau_production_list' %}" class="photo-link">Ouvrir Berceau</a>
+        </div>
+        <div class="photo-slot berceau-slot" style="display:flex;align-items:center;justify-content:center;font-weight:700;">
+            Zone Berceau
+        </div>
+    </div>
+    <div class="photo-card hover-lift">
+        <div class="photo-head">
+            <h3>CCB</h3>
+            <a href="{% url 'ccb_production' %}" class="photo-link">Ouvrir CCB</a>
+        </div>
+        <div class="photo-slot ccb-slot" style="display:flex;align-items:center;justify-content:center;font-weight:700;">
+            Zone CCB
+        </div>
+    </div>
+</div>
+{% endblock %}

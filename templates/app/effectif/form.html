@@ -1,0 +1,86 @@
+{% extends 'app/base_auth.html' %}
+
+{% block content %}
+<div class="card form-card effectif-form">
+    <h2>{{ page_title }}</h2>
+    <form method="post" class="form-grid">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <div class="error-text">{{ form.non_field_errors }}</div>
+        {% endif %}
+        {% for field in form %}
+            <div class="field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}{% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+                {% if field.errors %}
+                    <span class="error-text">{{ field.errors|join:', ' }}</span>
+                {% endif %}
+            </div>
+        {% endfor %}
+        <div class="form-actions">
+            <button class="primary-btn" id="effectifSubmitBtn" type="submit">Enregistrer</button>
+            <a href="{% url return_url_name %}" class="secondary-btn">Annuler</a>
+        </div>
+    </form>
+</div>
+<script>
+(() => {
+    const phoneInput = document.getElementById("id_num_tel");
+    const birthInput = document.getElementById("id_date_naissance");
+    const entryInput = document.getElementById("id_date_entree");
+    const submitBtn = document.getElementById("effectifSubmitBtn");
+    const fullNameInput = document.getElementById("id_nom_complet");
+    const cinInput = document.getElementById("id_cin");
+    const identifiantInput = document.getElementById("id_identifiant");
+    if (!phoneInput || !birthInput || !entryInput || !submitBtn) return;
+
+    const phonePattern = /^\+?[0-9]{8,15}$/;
+    const minAgeYears = 18;
+
+    function setError(input, message) {
+        input.setCustomValidity(message || "");
+    }
+
+    function validatePhone() {
+        const value = (phoneInput.value || "").trim();
+        setError(phoneInput, phonePattern.test(value) ? "" : "Format telephone invalide.");
+    }
+
+    function validateDates() {
+        const birth = new Date(birthInput.value);
+        const entry = new Date(entryInput.value);
+        const today = new Date();
+        setError(birthInput, "");
+        setError(entryInput, "");
+        if (birthInput.value && birth >= today) {
+            setError(birthInput, "La date de naissance doit etre dans le passe.");
+        }
+        if (birthInput.value && entryInput.value) {
+            const minEntry = new Date(birth);
+            minEntry.setFullYear(minEntry.getFullYear() + minAgeYears);
+            if (entry < minEntry) {
+                setError(entryInput, "Date entree invalide (age minimum 18 ans).");
+            }
+        }
+    }
+
+    function validateAll() {
+        if (fullNameInput) fullNameInput.value = (fullNameInput.value || "").replace(/\s+/g, " ").trim();
+        if (cinInput) cinInput.value = (cinInput.value || "").replace(/\s+/g, "").toUpperCase();
+        if (identifiantInput) identifiantInput.value = (identifiantInput.value || "").replace(/\s+/g, "").toUpperCase();
+        if (phoneInput) phoneInput.value = (phoneInput.value || "").replace(/\s+/g, "");
+        validatePhone();
+        validateDates();
+        submitBtn.disabled = !document.querySelector("form").checkValidity();
+    }
+
+    phoneInput.addEventListener("input", validateAll);
+    birthInput.addEventListener("input", validateAll);
+    entryInput.addEventListener("input", validateAll);
+    if (fullNameInput) fullNameInput.addEventListener("blur", validateAll);
+    if (cinInput) cinInput.addEventListener("blur", validateAll);
+    if (identifiantInput) identifiantInput.addEventListener("blur", validateAll);
+    validateAll();
+})();
+</script>
+{% endblock %}
