@@ -1,5 +1,6 @@
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DownloadIcon from "@mui/icons-material/Download";
+import ReportProblemOutlinedIcon from "@mui/icons-material/ReportProblemOutlined";
 import TableChartIcon from "@mui/icons-material/TableChart";
 import {
   Box,
@@ -80,6 +81,13 @@ const CATEGORIE_OPTIONS: { value: "" | ArretCategoryFilter; label: string }[] = 
 ];
 
 const MAX_BARS_PER_CHART = 30;
+
+/** Seuil 80 % Pareto — trait et libellé blancs (dashboard). */
+const PARETO_SEUIL_80 = {
+  stroke: alpha("#fff", 0.9),
+  strokeDasharray: "8 5",
+  labelFill: "#ffffff",
+} as const;
 
 /** Ligne renvoyée par le calcul Pareto types (cumul % inclus après agrégation requête). */
 type DashboardParetoTypeRow = {
@@ -179,24 +187,6 @@ function computeProductionKpis(
   return { roPercent, nroPercent, volume, objectif };
 }
 
-/**
- * Fiches production pour dénominateurs Pareto / KPI : alignées sur les shifts des alertes du jour.
- * Sans cela, « Tous shifts » additionne A+B+N alors que les alertes peuvent n'être que sur A → % impact faux.
- */
-function productionRowsForImpactDenominators(
-  prodRowsDay: ProductionBerceauRow[],
-  shiftsInAlertes: Set<string>,
-  shiftLocked: ShiftCode | ""
-): ProductionBerceauRow[] {
-  if (shiftLocked) {
-    return prodRowsDay.filter((p) => p.shift === shiftLocked);
-  }
-  if (!shiftsInAlertes.size) {
-    return prodRowsDay;
-  }
-  return prodRowsDay.filter((p) => shiftsInAlertes.has(p.shift));
-}
-
 async function fetchAllBerceauProductionForDate(date: string): Promise<ProductionBerceauRow[]> {
   const out: ProductionBerceauRow[] = [];
   let page = 1;
@@ -286,10 +276,7 @@ export default function ProductionDashboardPage() {
       await Promise.all(
         dates.map(async (d) => {
           const rows = await fetchAllBerceauProductionForDate(d);
-          prodRowsByDay.set(
-            d,
-            shiftFilter ? rows.filter((p) => p.shift === shiftFilter) : rows
-          );
+          prodRowsByDay.set(d, rows);
         })
       );
 
@@ -305,25 +292,9 @@ export default function ProductionDashboardPage() {
         })
       );
 
-      const shiftsByDay = new Map<string, Set<string>>();
-      for (const { day, rows } of alertesByDay) {
-        const set = shiftsByDay.get(day) ?? new Set<string>();
-        for (const r of rows) {
-          set.add(r.shift);
-        }
-        shiftsByDay.set(day, set);
-      }
-
-      const prodRowsForImpactByDay = new Map<string, ProductionBerceauRow[]>();
-      for (const d of dates) {
-        const prodAll = prodRowsByDay.get(d) ?? [];
-        const want = shiftsByDay.get(d) ?? new Set<string>();
-        prodRowsForImpactByDay.set(d, productionRowsForImpactDenominators(prodAll, want, shiftFilter));
-      }
-
       // Par jour : minutes par (type × moyen × heure H1–8 × diversité), formule par seau, somme des % par ligne type+moyen.
       // (Σ min / diviseur) × (100 / objectif_jour).
-      // « Tous shifts » : objectif_jour = Σ (objectif_h1…h8) sur chaque fiche production des shifts A+B+N
+      // objectif_jour = Σ (objectif_h1…h8) sur chaque fiche production des shifts A+B+N du jour
       // (chaque heure compte l’objectif de la ligne A1 ou A3 de ce shift) ; toutes les minutes d’arrêt du jour
       // partagent ce même dénominateur.
       const byType = new Map<
@@ -345,28 +316,19 @@ export default function ProductionDashboardPage() {
       >();
       for (const { day, rows } of alertesByDay) {
         const prodRowsDay = prodRowsByDay.get(day) ?? [];
-        const prodRowsForDenoms = prodRowsForImpactByDay.get(day) ?? [];
-        const objectifShift = sumAllHourlyObjectifsAcrossRows(prodRowsForDenoms);
-        const prodByShift = new Map<string, ProductionBerceauRow[]>();
-        for (const pr of prodRowsDay) {
-          const k = `${pr.date.slice(0, 10)}|${pr.shift}`;
-          const arr = prodByShift.get(k) ?? [];
-          arr.push(pr);
-          prodByShift.set(k, arr);
-        }
+        const objectifJour = sumAllHourlyObjectifsAcrossRows(prodRowsDay);
         const buckets = new Map<string, number>();
         const posteBuckets = new Map<string, number>();
         const posteIdFilter = Number(paretoPosteId);
         const filterByPoste = Number.isFinite(posteIdFilter) && posteIdFilter > 0;
+        const prodForImpact = prodRowsDay.length ? prodRowsDay : null;
         for (const row of rows) {
-          const rowDay = row.date.slice(0, 10);
-          const prodRowsForAlert = prodByShift.get(`${rowDay}|${row.shift}`) ?? [];
           if (!filterByPoste || Number(row.poste_id) === posteIdFilter) {
-            addRowToParetoMinuteBuckets(buckets, row, prodRowsForAlert);
+            addRowToParetoMinuteBuckets(buckets, row, prodForImpact);
           }
-          addRowToParetoPosteMinuteBuckets(posteBuckets, row, prodRowsForAlert);
+          addRowToParetoPosteMinuteBuckets(posteBuckets, row, prodForImpact);
         }
-        const { byType: dayByType } = analyzeParetoMinuteBuckets(buckets, objectifShift);
+        const { byType: dayByType } = analyzeParetoMinuteBuckets(buckets, objectifJour);
         for (const [label, v] of dayByType) {
           if (!byType.has(label)) {
             byType.set(label, {
@@ -386,7 +348,7 @@ export default function ProductionDashboardPage() {
           entry.minutesA1 += v.minutesA1;
           entry.minutesA3 += v.minutesA3;
         }
-        const { byPoste: dayByPoste } = analyzeParetoPosteMinuteBuckets(posteBuckets, objectifShift);
+        const { byPoste: dayByPoste } = analyzeParetoPosteMinuteBuckets(posteBuckets, objectifJour);
         for (const [posteName, v] of dayByPoste) {
           if (!byPoste.has(posteName)) {
             byPoste.set(posteName, { poste: posteName, pctA1: 0, pctA3: 0, minutesA1: 0, minutesA3: 0 });
@@ -438,7 +400,7 @@ export default function ProductionDashboardPage() {
         return { ...r, totalPct: totalRowPct, cumulePercent: posteCum, tempsArretMin };
       });
 
-      const productionKpis = computeProductionKpis(prodRowsForImpactByDay, dates, shiftFilter);
+      const productionKpis = computeProductionKpis(prodRowsByDay, dates, shiftFilter);
       return { rows: withCum, posteImpactRows: posteWithCum, productionKpis };
     },
   });
@@ -521,6 +483,19 @@ export default function ProductionDashboardPage() {
       : productionKpis?.nroPercent != null
         ? `${productionKpis.nroPercent.toFixed(1)} %`
         : "—";
+
+  const roDayPct =
+    selectedDayTrend?.ro != null
+      ? Number(selectedDayTrend.ro)
+      : productionKpis?.roPercent != null
+        ? Number(productionKpis.roPercent)
+        : null;
+  const nroDayPct =
+    selectedDayTrend?.nro != null
+      ? Number(selectedDayTrend.nro)
+      : productionKpis?.nroPercent != null
+        ? Number(productionKpis.nroPercent)
+        : null;
 
   const handleExportParetoTypesExcel = useCallback(() => {
     if (!percentRows.length) return;
@@ -630,8 +605,6 @@ export default function ProductionDashboardPage() {
               value={paretoPosteId}
               onChange={(e) => setParetoPosteId(e.target.value)}
               sx={{ minWidth: 220, maxWidth: 320 }}
-              helperText="Filtre uniquement le tableau et le graphique « types × moyen » ci‑dessous."
-              FormHelperTextProps={{ sx: { maxWidth: 320 } }}
             >
               <MenuItem value="">
                 <em>Tous les postes</em>
@@ -663,10 +636,11 @@ export default function ProductionDashboardPage() {
         !productionKpis && (
         <Paper sx={{ p: 2, borderRadius: 2 }}>
           <Typography color="text.secondary">
-            Aucune donnée pour ce périmètre (arrêts UEP Berceau + fiche production avec objectifs H1–H8 renseignés
+            Aucune donnée pour ce périmètre : arrêts UEP Berceau et fiche production du jour avec objectifs
+            H1–H8 (même shift que les arrêts si possible). Les arrêts seuls ne suffisent pas pour le Pareto %.
             {effectiveShift ? ` · shift ${effectiveShift}` : " · tous shifts"}
             {categorie ? ` · catégorie « ${categorieLabelActive} »` : ""}
-            {paretoPosteLabel ? ` · poste « ${paretoPosteLabel} »` : ""}). Réessaie avec un autre jour, « Tous les postes », ou une autre catégorie.
+            {paretoPosteLabel ? ` · poste « ${paretoPosteLabel} »` : ""}). Vérifie la fiche production Berceau pour cette date.
           </Typography>
         </Paper>
       )}
@@ -708,6 +682,8 @@ export default function ProductionDashboardPage() {
           error={roNroTrendQuery.isError}
           roValue={displayRoValue}
           nroValue={displayNroValue}
+          roDayPct={roDayPct}
+          nroDayPct={nroDayPct}
         />
       )}
 
@@ -720,37 +696,59 @@ export default function ProductionDashboardPage() {
               maxWidth: { md: 720 },
               borderRadius: 3,
               overflow: "hidden",
-              border: `1px solid ${alpha(theme.palette.divider, 0.45)}`,
+              border: `1px solid ${alpha(theme.palette.error.main, 0.35)}`,
+              borderLeft: "4px solid",
+              borderLeftColor: theme.palette.error.main,
               boxShadow: `0 10px 40px ${alpha("#000", 0.28)}, 0 0 0 1px ${alpha(theme.palette.common.white, 0.04)}`,
             }}
           >
             <Stack
+              direction="row"
+              spacing={2}
+              alignItems="flex-start"
               sx={{
                 p: 2.5,
-                background: `linear-gradient(165deg, ${alpha(theme.palette.secondary.main, 0.14)} 0%, ${alpha(theme.palette.secondary.main, 0.04)} 55%, transparent 100%)`,
+                background: `linear-gradient(165deg, ${alpha(theme.palette.error.main, 0.12)} 0%, ${alpha(
+                  theme.palette.secondary.main,
+                  0.04
+                )} 55%, transparent 100%)`,
               }}
-              spacing={1}
             >
-              <Typography
-                variant="overline"
+              <Box
                 sx={{
-                  letterSpacing: "0.12em",
-                  fontWeight: 700,
-                  fontSize: "0.65rem",
-                  color: alpha(theme.palette.text.secondary, 0.95),
+                  p: 1.25,
+                  borderRadius: 2,
+                  bgcolor: alpha(theme.palette.error.main, 0.14),
+                  border: `1px solid ${alpha(theme.palette.error.main, 0.4)}`,
+                  display: "grid",
+                  placeItems: "center",
+                  flexShrink: 0,
                 }}
               >
-                Arrêt long
-              </Typography>
-              <Typography variant="h6" fontWeight={800} sx={{ lineHeight: 1.35, wordBreak: "break-word" }}>
-                {topType ? topType.label : "—"}
-              </Typography>
-              {topType && (
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                  Temps d&apos;arrêt : {topType.minutes.toLocaleString("fr-FR")} min · Impact :{" "}
-                  {topType.impactPct.toFixed(1)} %
+                <ReportProblemOutlinedIcon sx={{ color: theme.palette.error.main, fontSize: 32 }} />
+              </Box>
+              <Stack spacing={0.75} sx={{ minWidth: 0, flex: 1 }}>
+                <Typography
+                  variant="overline"
+                  sx={{
+                    letterSpacing: "0.12em",
+                    fontWeight: 700,
+                    fontSize: "0.65rem",
+                    color: alpha(theme.palette.error.light, 0.95),
+                  }}
+                >
+                  Arrêt long
                 </Typography>
-              )}
+                <Typography variant="h6" fontWeight={800} sx={{ lineHeight: 1.35, wordBreak: "break-word" }}>
+                  {topType ? topType.label : "—"}
+                </Typography>
+                {topType && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                    Temps d&apos;arrêt : {topType.minutes.toLocaleString("fr-FR")} min · Impact :{" "}
+                    {topType.impactPct.toFixed(1)} %
+                  </Typography>
+                )}
+              </Stack>
             </Stack>
           </Paper>
 
@@ -805,20 +803,20 @@ export default function ProductionDashboardPage() {
                   <ReferenceLine
                     yAxisId="right"
                     y={80}
-                    stroke={chart.reference80.stroke}
-                    strokeDasharray={chart.reference80.strokeDasharray}
+                    stroke={PARETO_SEUIL_80.stroke}
+                    strokeDasharray={PARETO_SEUIL_80.strokeDasharray}
                     label={{
                       value: "Seuil 80%",
                       position: "insideTopRight",
-                      fill: chart.reference80.labelFill,
+                      fill: PARETO_SEUIL_80.labelFill,
                       fontWeight: 700,
                     }}
                   />
                   {seuilType && (
                     <ReferenceLine
                       x={seuilType}
-                      stroke={chart.reference80.stroke}
-                      strokeDasharray={chart.reference80.strokeDasharray}
+                      stroke={PARETO_SEUIL_80.stroke}
+                      strokeDasharray={PARETO_SEUIL_80.strokeDasharray}
                     />
                   )}
                   {typeChartDataLimited.map((row) => (
@@ -829,7 +827,7 @@ export default function ProductionDashboardPage() {
                         { x: row.typeArret, y: 0 },
                         { x: row.typeArret, y: row.cumulePercent },
                       ]}
-                      stroke={chart.projection.stroke}
+                      stroke={alpha("#fff", 0.35)}
                       strokeDasharray={chart.projection.strokeDasharray}
                     />
                   ))}
@@ -837,9 +835,9 @@ export default function ProductionDashboardPage() {
                     yAxisId="left"
                     dataKey="totalPct"
                     name="Impact"
-                    fill={`url(#${chart.ids.barGreen})`}
+                    fill={`url(#${chart.ids.barPrimary})`}
                     maxBarSize={44}
-                    shape={paretoGradientBarShape(chart, 3, 4, "green")}
+                    shape={paretoGradientBarShape(chart, 3, 4, "primary")}
                     isAnimationActive
                     animationDuration={chart.animation.barDuration}
                     animationEasing={chart.animation.barEasing}
@@ -851,11 +849,10 @@ export default function ProductionDashboardPage() {
                     type="monotone"
                     dataKey="cumulePercent"
                     name="Cumulé"
-                    stroke={`url(#${chart.ids.paretoLine})`}
+                    stroke="#ffffff"
                     strokeWidth={3}
-                    style={{ filter: `url(#${chart.ids.lineGlowRed})` }}
-                    dot={{ r: 4.5, fill: chart.colors.seriesRed, stroke: alpha("#fff", 0.35), strokeWidth: 1 }}
-                    activeDot={{ r: 7, fill: chart.colors.seriesRed, stroke: "#fff", strokeWidth: 2 }}
+                    dot={{ r: 4.5, fill: "#ffffff", stroke: alpha("#fff", 0.35), strokeWidth: 1 }}
+                    activeDot={{ r: 7, fill: "#ffffff", stroke: alpha("#000", 0.25), strokeWidth: 2 }}
                     isAnimationActive
                     animationDuration={chart.animation.lineDuration}
                   >
@@ -867,7 +864,7 @@ export default function ProductionDashboardPage() {
                           <text
                             x={Number(x)}
                             y={Number(y) - 10}
-                            fill={chart.colors.seriesRed}
+                            fill="#ffffff"
                             fontSize={10}
                             fontWeight={700}
                             textAnchor="middle"
@@ -960,20 +957,20 @@ export default function ProductionDashboardPage() {
                   <ReferenceLine
                     yAxisId="right"
                     y={80}
-                    stroke={chart.reference80.stroke}
-                    strokeDasharray={chart.reference80.strokeDasharray}
+                    stroke={PARETO_SEUIL_80.stroke}
+                    strokeDasharray={PARETO_SEUIL_80.strokeDasharray}
                     label={{
                       value: "Seuil 80%",
                       position: "insideTopRight",
-                      fill: chart.reference80.labelFill,
+                      fill: PARETO_SEUIL_80.labelFill,
                       fontWeight: 700,
                     }}
                   />
                   {seuilPoste && (
                     <ReferenceLine
                       x={seuilPoste}
-                      stroke={chart.reference80.stroke}
-                      strokeDasharray={chart.reference80.strokeDasharray}
+                      stroke={PARETO_SEUIL_80.stroke}
+                      strokeDasharray={PARETO_SEUIL_80.strokeDasharray}
                     />
                   )}
                   {posteChartDataLimited.map((row) => (
@@ -984,7 +981,7 @@ export default function ProductionDashboardPage() {
                         { x: row.poste, y: 0 },
                         { x: row.poste, y: row.cumulePercent },
                       ]}
-                      stroke={chart.projection.stroke}
+                      stroke={alpha("#fff", 0.35)}
                       strokeDasharray={chart.projection.strokeDasharray}
                     />
                   ))}
@@ -992,9 +989,9 @@ export default function ProductionDashboardPage() {
                     yAxisId="left"
                     dataKey="totalPct"
                     name="Impact"
-                    fill={`url(#${chart.ids.barGreen})`}
+                    fill={`url(#${chart.ids.barPrimary})`}
                     maxBarSize={42}
-                    shape={paretoGradientBarShape(chart, 3, 4, "green")}
+                    shape={paretoGradientBarShape(chart, 3, 4, "primary")}
                     isAnimationActive
                     animationDuration={chart.animation.barDuration}
                     animationEasing={chart.animation.barEasing}
@@ -1006,11 +1003,10 @@ export default function ProductionDashboardPage() {
                     type="monotone"
                     dataKey="cumulePercent"
                     name="Cumulé"
-                    stroke={`url(#${chart.ids.paretoLine})`}
+                    stroke="#ffffff"
                     strokeWidth={3}
-                    style={{ filter: `url(#${chart.ids.lineGlowRed})` }}
-                    dot={{ r: 4.5, fill: chart.colors.seriesRed, stroke: alpha("#fff", 0.35), strokeWidth: 1 }}
-                    activeDot={{ r: 7, fill: chart.colors.seriesRed, stroke: "#fff", strokeWidth: 2 }}
+                    dot={{ r: 4.5, fill: "#ffffff", stroke: alpha("#fff", 0.35), strokeWidth: 1 }}
+                    activeDot={{ r: 7, fill: "#ffffff", stroke: alpha("#000", 0.25), strokeWidth: 2 }}
                     isAnimationActive
                     animationDuration={chart.animation.lineDuration}
                   >
@@ -1022,7 +1018,7 @@ export default function ProductionDashboardPage() {
                           <text
                             x={Number(x)}
                             y={Number(y) - 10}
-                            fill={chart.colors.seriesRed}
+                            fill="#ffffff"
                             fontSize={10}
                             fontWeight={700}
                             textAnchor="middle"

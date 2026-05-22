@@ -34,6 +34,7 @@ import {
   ChartGradientDefs,
   ChartLegendContent,
   ChartPlotFrame,
+  impactSeriesStyle,
   TrendAreaTooltip,
   useChartTheme,
 } from "../components/charts";
@@ -399,7 +400,7 @@ export default function HomeDashboardPage() {
     });
   }, [arretsParJour.data]);
 
-  const curveGreen = chart.colors.seriesGreen;
+  const impact = impactSeriesStyle(chart);
   const curveGrey = chart.colors.seriesGrey;
   const captionMuted = alpha(theme.palette.text.primary, 0.58);
 
@@ -569,7 +570,7 @@ export default function HomeDashboardPage() {
               borderColor: alpha(theme.palette.divider, 0.5),
               borderRadius: 3,
               borderLeft: "4px solid",
-              borderLeftColor: curveGreen,
+              borderLeftColor: impact.strokeMuted,
               bgcolor: designTokens.glass.fill,
               display: "flex",
               flexDirection: "column",
@@ -599,14 +600,14 @@ export default function HomeDashboardPage() {
                   sx={{
                     p: 1,
                     borderRadius: 2,
-                    bgcolor: alpha(curveGreen, 0.12),
+                    bgcolor: alpha(impact.strokeMuted, 0.12),
                     border: "1px solid",
-                    borderColor: alpha(curveGreen, 0.28),
+                    borderColor: alpha(impact.stroke, 0.32),
                     display: "grid",
                     placeItems: "center",
                   }}
                 >
-                  <AssessmentOutlinedIcon sx={{ color: curveGreen, fontSize: 22 }} />
+                  <AssessmentOutlinedIcon sx={{ color: impact.stroke, fontSize: 22 }} />
                 </Box>
                 <Box sx={{ minWidth: 0 }}>
                   <Typography variant="subtitle1" fontWeight={800} sx={{ letterSpacing: "-0.01em" }}>
@@ -650,11 +651,12 @@ export default function HomeDashboardPage() {
                             type="monotone"
                             dataKey="berceau"
                             name="Arrets Berceau"
-                            stroke={curveGreen}
-                            strokeWidth={2.5}
-                            fill={alpha(curveGreen, 0.18)}
-                            dot={{ r: 3, strokeWidth: 0, fill: curveGreen }}
-                            activeDot={{ r: 6, stroke: "#fff", strokeWidth: 2 }}
+                            stroke={impact.stroke}
+                            strokeWidth={2.75}
+                            fill={impact.areaFill}
+                            style={{ filter: impact.glow }}
+                            dot={{ r: 3.5, strokeWidth: 0, fill: impact.dotFill }}
+                            activeDot={{ r: 6, fill: impact.stroke, stroke: "#fff", strokeWidth: 2 }}
                             isAnimationActive
                             animationDuration={chart.animation.lineDuration}
                           />
@@ -730,7 +732,7 @@ export default function HomeDashboardPage() {
                     gap: 0.5,
                   }}
                 >
-                  <FactoryOutlinedIcon sx={{ color: curveGreen, fontSize: 20 }} />
+                  <FactoryOutlinedIcon sx={{ color: impact.stroke, fontSize: 20 }} />
                   <AssessmentOutlinedIcon sx={{ color: curveGrey, fontSize: 20 }} />
                 </Box>
                 <Box sx={{ minWidth: 0 }}>
@@ -775,11 +777,12 @@ export default function HomeDashboardPage() {
                             type="monotone"
                             dataKey="berceau"
                             name="Berceau"
-                            stroke={curveGreen}
-                            strokeWidth={2.5}
-                            fill={alpha(curveGreen, 0.18)}
-                            dot={{ r: 3, strokeWidth: 0, fill: curveGreen }}
-                            activeDot={{ r: 6, stroke: "#fff", strokeWidth: 2 }}
+                            stroke={impact.stroke}
+                            strokeWidth={2.75}
+                            fill={impact.areaFill}
+                            style={{ filter: impact.glow }}
+                            dot={{ r: 3.5, strokeWidth: 0, fill: impact.dotFill }}
+                            activeDot={{ r: 6, fill: impact.stroke, stroke: "#fff", strokeWidth: 2 }}
                             isAnimationActive
                             animationDuration={chart.animation.lineDuration}
                           />
@@ -816,8 +819,8 @@ export default function HomeDashboardPage() {
                 width: 4,
                 height: 24,
                 borderRadius: 1,
-                bgcolor: "success.main",
-                boxShadow: (t) => `0 0 16px ${alpha(t.palette.success.main, 0.4)}`,
+                bgcolor: designTokens.brand.sky,
+                boxShadow: `0 0 16px ${alpha(designTokens.brand.skyGlow, 0.55)}`,
               }}
             />
             <Typography variant="overline" fontWeight={800} letterSpacing="0.18em" color="text.secondary">

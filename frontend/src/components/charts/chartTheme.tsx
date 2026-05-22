@@ -34,9 +34,13 @@ function buildChartTheme(theme: Theme, uid: string) {
     areaPrimary: `${uid}-grad-area-primary`,
     areaSecondary: `${uid}-grad-area-secondary`,
     areaWarning: `${uid}-grad-area-warning`,
+    /** Même palette que Pareto impact (barres bleues dashboard Berceau). */
+    areaImpact: `${uid}-grad-area-impact`,
     paretoLine: `${uid}-grad-pareto-line`,
     paretoGlow: `${uid}-pareto-glow`,
     barGreen: `${uid}-grad-bar-green`,
+    barOrange: `${uid}-grad-bar-orange`,
+    barRed: `${uid}-grad-bar-red`,
     areaTrendGreen: `${uid}-grad-area-trend-green`,
     areaTrendRed: `${uid}-grad-area-trend-red`,
     lineGlowGreen: `${uid}-line-glow-green`,
@@ -108,6 +112,22 @@ export function useChartTheme() {
   return useMemo(() => buildChartTheme(theme, uid), [theme, uid]);
 }
 
+/** Courbes / zones Berceau alignées sur le bleu Pareto impact (ciel + teal). */
+export function impactSeriesStyle(chart: ChartTheme) {
+  const stroke = designTokens.brand.skySoft;
+  const strokeMuted = designTokens.brand.sky;
+  return {
+    stroke,
+    strokeMuted,
+    areaFill: `url(#${chart.ids.areaImpact})`,
+    barFill: `url(#${chart.ids.barPrimary})`,
+    dotFill: strokeMuted,
+    glow: `drop-shadow(0 3px 10px ${alpha(designTokens.brand.sky, 0.42)})`,
+    cardAccent: strokeMuted,
+    chipColor: "primary" as const,
+  };
+}
+
 export function ChartGradientDefs({ chart }: { chart: ChartTheme }) {
   const { ids, colors } = chart;
   return (
@@ -137,6 +157,11 @@ export function ChartGradientDefs({ chart }: { chart: ChartTheme }) {
         <stop offset="0%" stopColor={alpha(colors.warning, 0.4)} />
         <stop offset="88%" stopColor={alpha(colors.warning, 0.02)} />
       </linearGradient>
+      <linearGradient id={ids.areaImpact} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={alpha(designTokens.brand.skySoft, 0.5)} />
+        <stop offset="48%" stopColor={alpha(designTokens.accent.teal, 0.24)} />
+        <stop offset="100%" stopColor={alpha(designTokens.brand.sky, 0.04)} />
+      </linearGradient>
       <linearGradient id={ids.paretoLine} x1="0" y1="0" x2="1" y2="0">
         <stop offset="0%" stopColor={alpha(colors.seriesRed, 0.55)} />
         <stop offset="100%" stopColor={colors.seriesRed} />
@@ -145,6 +170,16 @@ export function ChartGradientDefs({ chart }: { chart: ChartTheme }) {
         <stop offset="0%" stopColor={alpha(colors.seriesGreen, 0.35)} />
         <stop offset="55%" stopColor={alpha(colors.seriesGreen, 0.78)} />
         <stop offset="100%" stopColor={alpha(colors.seriesGreen, 0.98)} />
+      </linearGradient>
+      <linearGradient id={ids.barOrange} x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0%" stopColor={alpha("#f59e0b", 0.32)} />
+        <stop offset="55%" stopColor={alpha("#f59e0b", 0.75)} />
+        <stop offset="100%" stopColor={alpha("#fbbf24", 0.95)} />
+      </linearGradient>
+      <linearGradient id={ids.barRed} x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0%" stopColor={alpha(colors.seriesRed, 0.32)} />
+        <stop offset="55%" stopColor={alpha(colors.seriesRed, 0.72)} />
+        <stop offset="100%" stopColor={alpha(colors.seriesRed, 0.95)} />
       </linearGradient>
       <linearGradient id={ids.areaTrendGreen} x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor={alpha(colors.seriesGreen, 0.32)} />
@@ -281,12 +316,18 @@ export function ParetoComboTooltip({
   const cumul = Number(payload.find((p) => p.dataKey === "cumulePercent")?.value ?? 0);
   const mins = Number(payload[0]?.payload?.tempsArretMin ?? 0);
   const rows: TooltipRow[] = [
-    { label: "Impact", value: `${total.toFixed(2)} %`, accent: chart.colors.seriesGreen },
-    { label: "Cumulé Pareto", value: `${cumul.toFixed(1)} %`, accent: chart.colors.seriesRed },
+    { label: "Impact", value: `${total.toFixed(2)} %`, accent: chart.colors.primary },
+    { label: "Cumulé Pareto", value: `${cumul.toFixed(1)} %`, accent: "#ffffff" },
   ];
   if (mins > 0) rows.push({ label: "Minutes", value: `${mins.toFixed(0)} min` });
   return <GlassTooltipShell title={label} rows={rows} />;
 }
+
+/** Compatible with Recharts `TooltipPayload` entries. */
+export type SparklineTooltipPayloadItem = Readonly<{
+  name?: string | number;
+  value?: number | string | readonly (string | number)[];
+}>;
 
 export function SparklineTooltip({
   active,
@@ -297,17 +338,20 @@ export function SparklineTooltip({
   accentColor,
 }: {
   active?: boolean;
-  payload?: Array<{ name?: string; value?: number | string }>;
-  label?: string;
+  payload?: readonly SparklineTooltipPayloadItem[];
+  label?: string | number;
   chart: ChartTheme;
   valueLabel?: string;
   accentColor?: string;
 }) {
   if (!active || !payload?.length) return null;
-  const v = Number(payload[0]?.value ?? 0);
+  const raw = payload[0]?.value;
+  const scalar = Array.isArray(raw) ? raw[0] : raw;
+  const v = Number(scalar ?? 0);
+  const title = label != null && label !== "" ? String(label) : undefined;
   return (
     <GlassTooltipShell
-      title={label}
+      title={title}
       rows={[
         {
           label: valueLabel,
@@ -395,13 +439,16 @@ export function resolveChartSwatchColor(
     return chart.colors.seriesGrey;
   }
   if (label.includes("stock fin a1") || (label.includes("a1") && label.includes("stock"))) {
-    return chart.colors.seriesGreen;
+    return designTokens.brand.skySoft;
   }
   if (label.includes("% a3") || label.endsWith("a3")) return chart.colors.seriesGrey;
   if (label.includes("nro") || label.includes("cumul")) return chart.colors.seriesRed;
   if (label.includes("ccb")) return chart.colors.seriesGrey;
+  if (label.includes("arret") && label.includes("berceau")) {
+    return designTokens.brand.skySoft;
+  }
   if (label.includes("berceau") || label.includes("ro") || label.includes("impact")) {
-    return chart.colors.seriesGreen;
+    return designTokens.brand.skySoft;
   }
   if (label.includes("arret")) return chart.colors.seriesRed;
   return chart.colors.seriesGreen;
@@ -517,6 +564,17 @@ type ParetoBarShapeProps = {
   height?: number | string;
 };
 
+const HISTO_ORANGE = "#f59e0b";
+
+/** Dégradé verre pour barres RO/NRO selon la couleur seuil. */
+export function histogramGradientId(chart: ChartTheme, solidColor: string): string {
+  if (solidColor === chart.colors.seriesGreen || solidColor === designTokens.accent.emerald) {
+    return chart.ids.barGreen;
+  }
+  if (solidColor === HISTO_ORANGE) return chart.ids.barOrange;
+  return chart.ids.barRed;
+}
+
 export function paretoGradientBarShape(
   chart: ChartTheme,
   minHeightPx: number,
@@ -525,6 +583,49 @@ export function paretoGradientBarShape(
 ) {
   const fillUrl = `url(#${variant === "green" ? chart.ids.barGreen : chart.ids.barPrimary})`;
   const glowColor = variant === "green" ? chart.colors.seriesGreen : chart.colors.primary;
+  return glassBarRectShape({ fillUrl, glowColor, minHeightPx, minWidthPx });
+}
+
+/** Barres histogramme / Pareto — dégradé + ombre (effet verre). */
+export function glassHistogramBarShape(
+  chart: ChartTheme,
+  minHeightPx: number,
+  minWidthPx: number,
+  dataKey: string,
+  colorForValue: (pct: number) => string
+) {
+  return (props: ParetoBarShapeProps & { payload?: Record<string, unknown> }) => {
+    const payload = props.payload ?? {};
+    const pct = Number(payload[dataKey]);
+    const glow = colorForValue(pct);
+    const fillUrl = `url(#${histogramGradientId(chart, glow)})`;
+    const selected = Boolean(payload.isSelected);
+    return glassBarRectShape({
+      fillUrl,
+      glowColor: glow,
+      minHeightPx,
+      minWidthPx,
+      stroke: selected ? alpha("#fff", 0.9) : undefined,
+      strokeWidth: selected ? 2 : 0,
+    })(props);
+  };
+}
+
+function glassBarRectShape({
+  fillUrl,
+  glowColor,
+  minHeightPx,
+  minWidthPx,
+  stroke,
+  strokeWidth = 0,
+}: {
+  fillUrl: string;
+  glowColor: string;
+  minHeightPx: number;
+  minWidthPx: number;
+  stroke?: string;
+  strokeWidth?: number;
+}) {
   return (props: ParetoBarShapeProps) => {
     const x = Number(props.x ?? 0);
     const y = Number(props.y ?? 0);
@@ -544,7 +645,9 @@ export function paretoGradientBarShape(
           fill={fillUrl}
           rx={6}
           ry={6}
-          style={{ filter: `drop-shadow(0 4px 12px ${alpha(glowColor, 0.4)})` }}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          style={{ filter: `drop-shadow(0 4px 14px ${alpha(glowColor, 0.45)})` }}
         />
       </g>
     );

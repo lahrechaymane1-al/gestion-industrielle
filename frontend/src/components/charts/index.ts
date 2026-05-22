@@ -1,6 +1,7 @@
 export {
   ChartGradientDefs,
   ChartLegendContent,
+  impactSeriesStyle,
   resolveChartSwatchColor,
   ChartPlotFrame,
   CHART_OVERFLOW_SX,
@@ -8,6 +9,7 @@ export {
   ParetoComboTooltip,
   barIntegerValueLabel,
   paretoBarValueLabel,
+  glassHistogramBarShape,
   paretoGradientBarShape,
   SparklineTooltip,
   StockEntreeSortieTooltip,

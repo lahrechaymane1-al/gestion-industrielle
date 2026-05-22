@@ -17,6 +17,7 @@ import {
   ChartLegendContent,
   ChartPlotFrame,
   CHART_OVERFLOW_SX,
+  impactSeriesStyle,
   TrendAreaTooltip,
   useChartTheme,
 } from "../components/charts";
@@ -70,7 +71,7 @@ function buildStockFinTrendSeries(
 export function HomeStockSuiviChart({ stockA1, stockA3, loading, error = false, today }: HomeStockSuiviChartProps) {
   const theme = useTheme();
   const chart = useChartTheme();
-  const curveGreen = chart.colors.seriesGreen;
+  const impact = impactSeriesStyle(chart);
   const curveGrey = chart.colors.seriesGrey;
 
   const chartData = useMemo(
@@ -89,7 +90,7 @@ export function HomeStockSuiviChart({ stockA1, stockA3, loading, error = false, 
         borderColor: alpha(theme.palette.divider, 0.5),
         borderRadius: 3,
         borderLeft: "4px solid",
-        borderLeftColor: curveGreen,
+        borderLeftColor: impact.strokeMuted,
         bgcolor: designTokens.glass.fill,
         overflow: "hidden",
         boxShadow: `0 8px 32px ${alpha(theme.palette.common.black, 0.18)}`,
@@ -110,14 +111,14 @@ export function HomeStockSuiviChart({ stockA1, stockA3, loading, error = false, 
             sx={{
               p: 1,
               borderRadius: 2,
-              bgcolor: alpha(curveGreen, 0.1),
+              bgcolor: alpha(impact.strokeMuted, 0.1),
               border: "1px solid",
-              borderColor: alpha(curveGreen, 0.24),
+              borderColor: alpha(impact.stroke, 0.28),
               display: "grid",
               placeItems: "center",
             }}
           >
-            <Inventory2OutlinedIcon sx={{ color: curveGreen, fontSize: 22 }} />
+            <Inventory2OutlinedIcon sx={{ color: impact.stroke, fontSize: 22 }} />
           </Box>
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography variant="subtitle1" fontWeight={800} sx={{ letterSpacing: "-0.01em" }}>
@@ -131,7 +132,7 @@ export function HomeStockSuiviChart({ stockA1, stockA3, loading, error = false, 
                 {currentA1 != null && (
                   <Chip
                     size="small"
-                    color={currentA1 < 0 ? "error" : "success"}
+                    color={currentA1 < 0 ? "error" : "primary"}
                     variant="outlined"
                     label={`A1 : ${fmtQty(currentA1)}`}
                   />
@@ -195,11 +196,12 @@ export function HomeStockSuiviChart({ stockA1, stockA3, loading, error = false, 
                     type="monotone"
                     dataKey="a1"
                     name="Stock fin A1"
-                    stroke={curveGreen}
+                    stroke={impact.stroke}
                     strokeWidth={2.75}
                     connectNulls
-                    dot={{ r: 3, strokeWidth: 0, fill: curveGreen }}
-                    activeDot={{ r: 6, stroke: "#fff", strokeWidth: 2 }}
+                    style={{ filter: impact.glow }}
+                    dot={{ r: 3.5, strokeWidth: 0, fill: impact.dotFill }}
+                    activeDot={{ r: 6, fill: impact.stroke, stroke: "#fff", strokeWidth: 2 }}
                     isAnimationActive
                     animationDuration={chart.animation.lineDuration}
                   />
