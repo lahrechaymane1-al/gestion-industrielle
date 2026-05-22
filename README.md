@@ -37,6 +37,12 @@ cd frontend && npm install && npm run dev
 
 Le proxy Vite expose `/auth` vers Django (`vite.config.ts`). Tests unitaires SPA (ex. verrouillage shift) : `npm run test` dans `frontend/`.
 
+## Logo Stellantis (déploiement)
+
+- Fichiers : `static/brand/stellantis-logo.png` (page login Django) et `frontend/public/brand/stellantis-logo.png` (barre latérale React).
+- Après modification du logo : garder les deux copies identiques, puis `npm run build --workspace gestion-industrielle-ui`.
+- Détails : `static/brand/README.md`.
+
 ## Module Alerte Panne Berceau
 
 - Page React: `/app/berceau/arret`

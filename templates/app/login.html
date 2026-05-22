@@ -95,25 +95,15 @@
             font-size: 0.95rem;
         }
 
-        .logo-mark {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            background: linear-gradient(135deg, var(--sky) 0%, var(--sky-soft) 50%, var(--amber) 120%);
-            color: var(--btn-text);
-            font-weight: 800;
-            font-size: 0.9rem;
-            display: grid;
-            place-items: center;
-            box-shadow: var(--glow);
-            border: 1px solid rgba(56, 189, 248, 0.4);
+        .brand-logo {
+            display: block;
+            width: min(220px, 100%);
+            height: auto;
+            max-height: 44px;
+            object-fit: contain;
             margin-bottom: 0.25rem;
-            transition: transform 0.2s ease, box-shadow 0.25s ease;
-        }
-
-        .logo-mark:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 12px 36px rgba(56, 189, 248, 0.35);
+            /* Logo file has a black fill — blend into the dark panel */
+            mix-blend-mode: screen;
         }
 
         .login-panel {
@@ -217,9 +207,14 @@
 <body>
     <section class="login-shell">
         <aside class="login-brand">
-            <div class="logo-mark" aria-hidden="true">GI</div>
-            <h1>Gestion industrielle</h1>
-            <p>Suivi production, absences, effectifs et mode dégradé pour Berceau et CCB.</p>
+            <img
+                class="brand-logo"
+                src="{% static 'brand/stellantis-logo.png' %}"
+                alt="Stellantis"
+                width="220"
+                height="44"
+            />
+            <h1>Gestion berceau - ccb</h1>
         </aside>
         <div class="login-panel">
             <div class="login-card">

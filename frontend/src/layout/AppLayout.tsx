@@ -30,6 +30,7 @@ import { Link as RouterLink, NavLink, Outlet, useLocation, useNavigate } from "r
 import { useMe } from "../auth/AuthContext";
 import { RouteErrorBoundary } from "../components/feedback/RouteErrorBoundary";
 import AppAmbientBackground from "../components/layout/AppAmbientBackground";
+import { STELLANTIS_LOGO_ALT, STELLANTIS_LOGO_SRC } from "../constants/brand";
 import { designTokens } from "../theme/designTokens";
 
 const DRAWER_WIDTH = 280;
@@ -243,38 +244,20 @@ export default function AppLayout() {
         bgcolor: "transparent",
       }}
     >
-      <Toolbar sx={{ gap: 1.5, py: 2, minHeight: 72 }}>
+      <Toolbar sx={{ py: 2, minHeight: 64 }}>
         <Box
+          component="img"
+          src={STELLANTIS_LOGO_SRC}
+          alt={STELLANTIS_LOGO_ALT}
           sx={{
-            width: 44,
-            height: 44,
-            borderRadius: 2,
-            background: `linear-gradient(135deg, ${brand.sky} 0%, ${designTokens.accent.teal} 48%, ${brand.amber} 115%)`,
-            color: brand.ink,
-            fontWeight: 800,
-            fontSize: 13,
-            letterSpacing: "-0.02em",
-            display: "grid",
-            placeItems: "center",
-            boxShadow: shadow.glowPrimary,
-            border: `1px solid ${alpha(brand.sky, 0.4)}`,
-            transition: `transform 0.25s ${SOFT_EASING}, box-shadow 0.3s ease`,
-            "&:hover": {
-              transform: "translateY(-2px)",
-              boxShadow: `0 12px 32px ${alpha(brand.sky, 0.38)}, 0 0 20px ${alpha(brand.sky, 0.12)}`,
-            },
+            width: "100%",
+            maxWidth: 220,
+            height: 36,
+            objectFit: "contain",
+            display: "block",
+            mixBlendMode: "screen",
           }}
-        >
-          GI
-        </Box>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography variant="subtitle2" fontWeight={800} color="text.primary" lineHeight={1.2} noWrap>
-            Gestion industrielle
-          </Typography>
-          <Typography variant="caption" color="text.secondary" fontWeight={600} noWrap>
-            UEP Berceau · UEP CCB
-          </Typography>
-        </Box>
+        />
       </Toolbar>
       <Divider sx={{ borderColor: "divider" }} />
       <Box sx={{ flex: 1, overflowY: "auto", py: 0.5 }}>
