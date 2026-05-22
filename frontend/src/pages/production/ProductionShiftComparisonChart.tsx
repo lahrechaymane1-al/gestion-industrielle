@@ -21,12 +21,13 @@ import {
 import { SafeResponsiveContainer } from "../../components/SafeResponsiveContainer";
 import { api } from "../../api/client";
 import type { EquipeScope, StockJournalResponse } from "../../api/types";
+import { mergeStockJournalResponses } from "../stock/stockJournalMerge";
 import { formatDateGroupLabel } from "./productionMetrics";
 
 type ProductionShiftComparisonChartProps = {
   equipe?: EquipeScope;
   date: string;
-  /** When empty, Berceau defaults to A1 (stock journal is per diversité). */
+  /** Vide ou « toutes » : A1 + A3. Sinon A1 ou A3 uniquement. */
   line?: string;
 };
 
@@ -36,8 +37,8 @@ const SHIFT_BARS = [
   { key: "N", label: "Shift N", dataKey: "entree_par_shift.N" as const },
 ] as const;
 
-/** Shift N — gris pâle, distinct du cyan (A) et de l’ambre (B). */
 const SHIFT_N_PALE_GREY = "#e2e8f0";
+const CHART_HISTORY_DAYS = 10;
 
 function formatChartDate(iso: string): string {
   try {
@@ -50,23 +51,48 @@ function formatChartDate(iso: string): string {
   }
 }
 
+function resolveLineMode(line: string | undefined, equipe: EquipeScope): "A1" | "A3" | "ALL" | null {
+  if (equipe !== "Berceau") return null;
+  const raw = (line ?? "").trim();
+  if (raw === "A1" || raw === "A3") return raw;
+  return "ALL";
+}
+
+async function fetchStockJournal(
+  equipe: EquipeScope,
+  line: "A1" | "A3" | null,
+  date: string,
+  days: number
+): Promise<StockJournalResponse> {
+  const params: Record<string, string | number> = { equipe, date, days };
+  if (line) params.line = line;
+  return (await api.get<StockJournalResponse>("/api/stock/journal/", { params })).data;
+}
+
 export default function ProductionShiftComparisonChart({
   equipe = "Berceau",
   date,
   line,
 }: ProductionShiftComparisonChartProps) {
   const chart = useChartTheme();
-  const effectiveLine =
-    equipe === "Berceau" ? (line === "A1" || line === "A3" ? line : "A1") : undefined;
+  const lineMode = resolveLineMode(line, equipe);
 
   const stockQuery = useQuery({
-    queryKey: ["stock-journal", equipe, effectiveLine, date],
-    queryFn: async () =>
-      (
-        await api.get<StockJournalResponse>("/api/stock/journal/", {
-          params: { equipe, line: effectiveLine, date, days: 10 },
-        })
-      ).data,
+    queryKey: ["stock-journal-shift-chart", equipe, lineMode ?? "CCB", date],
+    enabled: Boolean(date),
+    queryFn: async () => {
+      if (equipe !== "Berceau" || lineMode === null) {
+        return fetchStockJournal(equipe, null, date, CHART_HISTORY_DAYS);
+      }
+      if (lineMode === "A1" || lineMode === "A3") {
+        return fetchStockJournal(equipe, lineMode, date, CHART_HISTORY_DAYS);
+      }
+      const [a1, a3] = await Promise.all([
+        fetchStockJournal(equipe, "A1", date, CHART_HISTORY_DAYS),
+        fetchStockJournal(equipe, "A3", date, CHART_HISTORY_DAYS),
+      ]);
+      return mergeStockJournalResponses(a1, a3, date);
+    },
   });
 
   const historyChrono = useMemo(() => {
@@ -79,7 +105,12 @@ export default function ProductionShiftComparisonChart({
       }));
   }, [stockQuery.data?.history]);
 
-  const diversiteLabel = effectiveLine ?? "—";
+  const diversiteLabel =
+    equipe !== "Berceau"
+      ? "—"
+      : lineMode === "ALL"
+        ? "A1 + A3 (toutes)"
+        : lineMode ?? "—";
 
   const shiftColor = {
     A: chart.colors.primary,
@@ -109,7 +140,8 @@ export default function ProductionShiftComparisonChart({
         Comparaison production par shift (A / B / N)
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-        Entrées de stock calculées depuis la production · diversité {diversiteLabel} · 10 derniers jours.
+        Entrées de stock calculées depuis la production · diversité {diversiteLabel} · {CHART_HISTORY_DAYS}{" "}
+        derniers jours (jusqu’au {formatChartDate(date)}).
       </Typography>
 
       <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>

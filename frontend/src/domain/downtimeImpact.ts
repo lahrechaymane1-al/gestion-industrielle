@@ -11,7 +11,7 @@ export type ProductionRowsForImpact = ProductionBerceauRow | readonly Production
 
 export function parseDiversiteFromCause(cause: string | undefined | null): Diversity | null {
   const raw = (cause ?? "").trim();
-  const m = raw.match(/^\[diversite:(?<d>[^\]]+)\]/i);
+  const m = raw.match(/\[diversite:(?<d>[^\]]+)\]/i);
   const d = String(m?.groups?.d ?? "").trim().toUpperCase();
   if (d === "A1" || d === "A3") return d;
   return null;
@@ -146,8 +146,7 @@ export function hourlyObjectiveForDiversity(
 /**
  * (T.arret / diviseur) × (100 / objectif_shift)
  *
- * ``objectif_shift`` : somme des objectifs H1–H8 sur les fiches du shift (chaque heure a l’objectif
- * de sa ligne A1 ou A3 ; la somme sur 8 h = objectif du shift).
+ * ``objectif_shift`` : somme des objectifs H1–H8 sur toutes les fiches production du jour (A+B+N).
  */
 export function downtimeImpactPercent(
   tempsArretMin: number,

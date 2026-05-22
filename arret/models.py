@@ -120,7 +120,7 @@ class ArretBerceau(models.Model):
         super().clean()
         if self.poste_id and self.module_id and self.poste.module_id != self.module_id:
             raise ValidationError({"poste": "Le poste selectionne n'appartient pas au module."})
-        if self.moyen_id and self.poste_id and self.moyen.poste_id != self.poste_id:
+        if self.moyen_id and self.poste_id and self.moyen and self.moyen.poste_id != self.poste_id:
             raise ValidationError({"moyen": "Le moyen selectionne n'appartient pas au poste."})
 
 
@@ -129,7 +129,13 @@ class AlertePanne(models.Model):
 
     module = models.ForeignKey(BerceauModule, on_delete=models.PROTECT, related_name="alertes_pannes")
     poste = models.ForeignKey(BerceauPoste, on_delete=models.PROTECT, related_name="alertes_pannes")
-    moyen = models.ForeignKey(BerceauMoyen, on_delete=models.PROTECT, related_name="alertes_pannes")
+    moyen = models.ForeignKey(
+        BerceauMoyen,
+        on_delete=models.PROTECT,
+        related_name="alertes_pannes",
+        null=True,
+        blank=True,
+    )
     panne_type = models.ForeignKey(PanneType, on_delete=models.PROTECT, related_name="alertes_pannes")
     cause = models.TextField()
     solution = models.TextField()
@@ -165,6 +171,6 @@ class AlertePanne(models.Model):
         super().clean()
         if self.poste_id and self.module_id and self.poste.module_id != self.module_id:
             raise ValidationError({"poste": "Le poste selectionne n'appartient pas au module."})
-        if self.moyen_id and self.poste_id and self.moyen.poste_id != self.poste_id:
+        if self.moyen_id and self.poste_id and self.moyen and self.moyen.poste_id != self.poste_id:
             raise ValidationError({"moyen": "Le moyen selectionne n'appartient pas au poste."})
 

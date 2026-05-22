@@ -70,14 +70,17 @@ import { PanneTypesManagerDialog } from "./PanneTypesManagerDialog";
 import {
   addRowToParetoMinuteBuckets,
   analyzeParetoMinuteBuckets,
-  sumAllHourlyObjectifs,
+  sumAllHourlyObjectifsAcrossRows,
   summedObjectifsFromProductionRow,
 } from "../../domain/downtimeImpact";
 
 const alerteBaseSchema = z.object({
   module_id: z.coerce.number().int().positive(),
   poste_id: z.coerce.number().int().positive(),
-  moyen_id: z.coerce.number().int().positive(),
+  moyen_id: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined || v === 0 ? undefined : v),
+    z.coerce.number().int().positive().optional()
+  ),
   panne_type_id: z.coerce.number().int().positive(),
   category: z.enum(["maintenance", "kta", "logistique", "fabrication"]),
   commentaire: z.string().min(1),
@@ -128,12 +131,16 @@ function normalizeCategory(value: unknown) {
 
 function splitCauseIntoDiversiteAndCommentaire(cause: string | undefined | null) {
   const raw = (cause ?? "").trim();
-  const m = raw.match(/^\[diversite:(?<d>[^\]]+)\]\s*(?<c>[\s\S]*)$/i);
-  if (!m?.groups) return { diversite: "A1" as DiversiteValue, commentaire: raw };
-  const d = String(m.groups.d ?? "").trim().toUpperCase();
+  const m = raw.match(/\[diversite:(?<d>[^\]]+)\]/i);
+  const d = String(m?.groups?.d ?? "").trim().toUpperCase();
   const allowed = new Set(DIVERSITES.map((x) => x.value));
   const diversite = (allowed.has(d as DiversiteValue) ? (d as DiversiteValue) : "A1") as DiversiteValue;
-  return { diversite, commentaire: String(m.groups.c ?? "").trim() };
+  let commentaire = raw
+    .replace(/^\[import:NRO2026(?::\d{4}-\d{2}-\d{2})?\]\s*/i, "")
+    .replace(/\[diversite:[^\]]+\]\s*/i, "")
+    .trim();
+  if (!commentaire) commentaire = raw;
+  return { diversite, commentaire };
 }
 
 async function fetchAllAlertesPannes(params: Record<string, unknown>) {
@@ -203,6 +210,27 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
           params: { page: 1, per_page: 50, date: filterDate, shift: effectiveFilterShift },
         })
       ).data.results?.[0] ?? null,
+  });
+
+  const productionDayAllShiftsQuery = useQuery({
+    queryKey: ["arrets-objectif-day-all-shifts", filterDate],
+    enabled: equipe === "Berceau" && !!filterDate,
+    queryFn: async () => {
+      const out: ProductionBerceauRow[] = [];
+      let page = 1;
+      const perPage = 100;
+      while (true) {
+        const { data: res } = await api.get<Paginated<ProductionBerceauRow>>("/api/berceau/production/", {
+          params: { page, per_page: perPage, date: filterDate, sort: "-date" },
+        });
+        const batch = res.results ?? [];
+        out.push(...batch);
+        const total = res.total ?? 0;
+        if (out.length >= total || batch.length === 0) break;
+        page += 1;
+      }
+      return out;
+    },
   });
 
   const objectifs = useMemo(() => summedObjectifsFromProductionRow(objectifA1Query.data ?? null), [objectifA1Query.data]);
@@ -365,7 +393,10 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
       await qc.invalidateQueries({ queryKey: ["alertes-pannes"] });
       await qc.invalidateQueries({ queryKey: ["alertes-pannes-graph"] });
       await qc.invalidateQueries({ queryKey: ["dashboard-pareto-types-percent"] });
-      if (!isCcb) await qc.invalidateQueries({ queryKey: ["arrets-objectif-hourly"] });
+      if (!isCcb) {
+        await qc.invalidateQueries({ queryKey: ["arrets-objectif-hourly"] });
+        await qc.invalidateQueries({ queryKey: ["arrets-objectif-day-all-shifts"] });
+      }
       if (isCcb) await qc.invalidateQueries({ queryKey: ["prod-ccb"] });
       setOpen(false);
       setEditing(null);
@@ -380,7 +411,10 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
       await qc.invalidateQueries({ queryKey: ["alertes-pannes"] });
       await qc.invalidateQueries({ queryKey: ["alertes-pannes-graph"] });
       await qc.invalidateQueries({ queryKey: ["dashboard-pareto-types-percent"] });
-      if (!isCcb) await qc.invalidateQueries({ queryKey: ["arrets-objectif-hourly"] });
+      if (!isCcb) {
+        await qc.invalidateQueries({ queryKey: ["arrets-objectif-hourly"] });
+        await qc.invalidateQueries({ queryKey: ["arrets-objectif-day-all-shifts"] });
+      }
       if (isCcb) await qc.invalidateQueries({ queryKey: ["prod-ccb"] });
       setErrorMsg(null);
     },
@@ -397,7 +431,7 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
     form.reset({
       module_id: row.module_id,
       poste_id: row.poste_id,
-      moyen_id: row.moyen_id,
+      moyen_id: row.moyen_id && row.moyen_id > 0 ? row.moyen_id : undefined,
       panne_type_id: Number(row.panne_type_id) as never,
       commentaire,
       category: normalizeCategory(row.category),
@@ -413,10 +447,12 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
     const cause = isCcb
       ? values.commentaire.trim()
       : `[diversite:${(values as BerceauFormValues).diversite}] ${values.commentaire}`.trim();
+    const moyenPayload =
+      values.moyen_id != null && Number(values.moyen_id) > 0 ? { moyen_id: values.moyen_id } : { moyen_id: null };
     saveMutation.mutate({
       module_id: values.module_id,
       poste_id: values.poste_id,
-      moyen_id: values.moyen_id,
+      ...moyenPayload,
       panne_type_id: values.panne_type_id,
       category: values.category,
       date: values.date,
@@ -433,19 +469,22 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
   const activeFilters = [filterDate, filterShift, filterPosteId, filterCategory].filter(Boolean).length;
   const objectifA1 = Number(objectifs.A1 ?? 0);
   const objectifA3 = Number(objectifs.A3 ?? 0);
-  const prodRowForImpact = objectifA1Query.data ?? null;
-  const shiftHourlyTotal = useMemo(() => sumAllHourlyObjectifs(prodRowForImpact), [prodRowForImpact]);
+  const prodRowsForImpact = productionDayAllShiftsQuery.data ?? [];
+  const objectifJourTotal = useMemo(
+    () => sumAllHourlyObjectifsAcrossRows(prodRowsForImpact),
+    [prodRowsForImpact]
+  );
   const graphRows = useMemo(() => arretsGraphQuery.data ?? [], [arretsGraphQuery.data]);
 
   const graphImpact = useMemo(() => {
     if (!graphEnabled) return null;
-    const objectifShift = shiftHourlyTotal;
     const buckets = new Map<string, number>();
+    const prodForBuckets = prodRowsForImpact.length ? prodRowsForImpact : null;
     for (const row of graphRows) {
-      addRowToParetoMinuteBuckets(buckets, row, prodRowForImpact);
+      addRowToParetoMinuteBuckets(buckets, row, prodForBuckets);
     }
-    return analyzeParetoMinuteBuckets(buckets, objectifShift);
-  }, [graphEnabled, graphRows, prodRowForImpact, shiftHourlyTotal]);
+    return analyzeParetoMinuteBuckets(buckets, objectifJourTotal);
+  }, [graphEnabled, graphRows, prodRowsForImpact, objectifJourTotal]);
 
   const graphData = useMemo(() => {
     if (!graphImpact) return [];
@@ -648,7 +687,7 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                 {objectifA1 > 0 ? `${totalPct.a1.toFixed(2)}%` : "-"}
               </Typography>
               <Typography variant="caption" sx={{ opacity: 0.75 }}>
-                Formule: (temps / 1.3) × (100 / objectif du shift, Σ H1–H8)
+                Formule: (temps / 1.3) × (100 / objectif jour, Σ H1–H8 A+B+N)
               </Typography>
             </Paper>
             <Paper sx={{ p: 1.4, borderRadius: 3, minWidth: 220 }}>
@@ -659,7 +698,7 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                 {objectifA3 > 0 ? `${totalPct.a3.toFixed(2)}%` : "-"}
               </Typography>
               <Typography variant="caption" sx={{ opacity: 0.75 }}>
-                Formule: (temps / 1.8) × (100 / objectif du shift, Σ H1–H8)
+                Formule: (temps / 1.8) × (100 / objectif jour, Σ H1–H8 A+B+N)
               </Typography>
             </Paper>
             <Paper sx={{ p: 1.4, borderRadius: 3, flex: 1 }}>
@@ -667,11 +706,11 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                 Objectifs (production)
               </Typography>
               <Typography variant="body2" fontWeight={800}>
-                Σ shift (H1–H8): {shiftHourlyTotal > 0 ? shiftHourlyTotal : "—"} · A1: {objectifA1 > 0 ? objectifA1 : "—"} · A3:{" "}
-                {objectifA3 > 0 ? objectifA3 : "—"}
+                Σ jour (H1–H8, A+B+N): {objectifJourTotal > 0 ? objectifJourTotal : "—"} · A1 shift {effectiveFilterShift}:{" "}
+                {objectifA1 > 0 ? objectifA1 : "—"} · A3: {objectifA3 > 0 ? objectifA3 : "—"}
               </Typography>
               <Typography variant="caption" sx={{ opacity: 0.75 }}>
-                Basé sur Production {filterDate} / shift {effectiveFilterShift}
+                Pareto : objectif jour sur Production {filterDate} (tous shifts) · A1/A3 affichés : shift {effectiveFilterShift}
               </Typography>
             </Paper>
           </Stack>
@@ -804,7 +843,9 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                       <TableCell>{row.shift}</TableCell>
                       <TableCell>H{row.heure_production}</TableCell>
                       <TableCell>
-                        {isCcb ? `${row.poste_nom} / ${row.moyen_nom}` : `${row.module_nom} / ${row.poste_nom} / ${row.moyen_nom}`}
+                        {isCcb
+                          ? `${row.poste_nom}${row.moyen_nom ? ` / ${row.moyen_nom}` : ""}`
+                          : `${row.module_nom} / ${row.poste_nom}${row.moyen_nom ? ` / ${row.moyen_nom}` : ""}`}
                       </TableCell>
                       <TableCell>{row.panne_type_nom}</TableCell>
                       <TableCell>{row.category_label}</TableCell>
@@ -897,17 +938,25 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                 </TextField>
                 <TextField
                   select
-                  label="Moyen"
+                  label="Moyen (optionnel)"
                   fullWidth
                   disabled={!posteId}
                   value={moyenId || ""}
                   helperText={
                     !posteId
                       ? "Choisir un poste d'abord — la liste des moyens dépend du poste."
-                      : `Moyens pour « ${selectedPoste?.name ?? "…"} »`
+                      : moyens.length === 0
+                        ? "Aucun moyen pour ce poste — vous pouvez enregistrer sans moyen."
+                        : `Moyens pour « ${selectedPoste?.name ?? "…"} » (facultatif)`
                   }
-                  onChange={(e) => form.setValue("moyen_id", Number(e.target.value) as never)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    form.setValue("moyen_id", (v === "" ? undefined : Number(v)) as never);
+                  }}
                 >
+                  <MenuItem value="">
+                    <em>Aucun moyen</em>
+                  </MenuItem>
                   {moyens.map((m) => (
                     <MenuItem key={m.id} value={m.id}>
                       {m.name}
@@ -930,7 +979,7 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                     );
                     form.setValue("module_id", (next.moduleId ?? 0) as never);
                     form.setValue("poste_id", (next.posteId ?? 0) as never);
-                    form.setValue("moyen_id", (next.moyenId ?? 0) as never);
+                    form.setValue("moyen_id", (next.moyenId ?? undefined) as never);
                   }}
                 >
                   {modules.map((m) => (
@@ -953,7 +1002,7 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                       id
                     );
                     form.setValue("poste_id", (next.posteId ?? 0) as never);
-                    form.setValue("moyen_id", (next.moyenId ?? 0) as never);
+                    form.setValue("moyen_id", (next.moyenId ?? undefined) as never);
                   }}
                 >
                   {postesByModule.map((p) => (
@@ -964,13 +1013,25 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                 </TextField>
                 <TextField
                   select
-                  label="Moyen"
+                  label="Moyen (optionnel)"
                   fullWidth
                   disabled={!posteId}
                   value={moyenId || ""}
-                  helperText={!posteId ? "Choisir un poste d'abord" : undefined}
-                  onChange={(e) => form.setValue("moyen_id", Number(e.target.value) as never)}
+                  helperText={
+                    !posteId
+                      ? "Choisir un poste d'abord"
+                      : moyens.length === 0
+                        ? "Aucun moyen pour ce poste — vous pouvez enregistrer sans moyen."
+                        : "Facultatif"
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    form.setValue("moyen_id", (v === "" ? undefined : Number(v)) as never);
+                  }}
                 >
+                  <MenuItem value="">
+                    <em>Aucun moyen</em>
+                  </MenuItem>
                   {moyens.map((m) => (
                     <MenuItem key={m.id} value={m.id}>
                       {m.name}

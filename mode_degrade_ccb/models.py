@@ -1,12 +1,14 @@
 from django.contrib.auth import get_user_model
 from django.db import models
 
+from mode_degrade.statut import STATUS_CHOICES
+
 User = get_user_model()
 
 
 class ModeDegrade(models.Model):
     SHIFT_CHOICES = (("A", "A"), ("B", "B"), ("N", "N"))
-    STATUS_CHOICES = (("Ouvert", "Ouvert"), ("En cours", "En cours"), ("Clos", "Clos"))
+    STATUS_CHOICES = STATUS_CHOICES
     EQUIPE_CHOICES = (("Berceau", "Berceau"), ("CCB", "CCB"))
 
     equipe = models.CharField("Equipe", max_length=20, choices=EQUIPE_CHOICES)

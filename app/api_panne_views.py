@@ -25,7 +25,12 @@ from .ccb_matrix_loader import (
     ccb_moyen_sort_rank,
     ccb_poste_names_in_order,
 )
-from .downtime_impact import berceau_alerte_impact_pct, production_rows_map_for_berceau_alertes, production_rows_map_for_pairs
+from .downtime_impact import (
+    berceau_alerte_impact_pct,
+    production_rows_by_date_for_alertes,
+    production_rows_map_for_pairs,
+)
+from .nro_import_utils import comment_from_imported_cause
 from .panne_type_catalog import BERCEAU_PANNE_TYPE_NAMES, CCB_PANNE_TYPE_NAMES
 from .models import (
     AlertePanne,
@@ -80,7 +85,7 @@ def _alerte_to_dict(item: AlertePanne, prod_rows: list | None = None) -> dict:
         "poste_id": item.poste_id,
         "poste_nom": item.poste.name,
         "moyen_id": item.moyen_id,
-        "moyen_nom": item.moyen.name,
+        "moyen_nom": item.moyen.name if item.moyen_id else "",
         "panne_type_id": item.panne_type_id,
         "panne_type_nom": item.panne_type.name,
         "cause": item.cause,
@@ -104,11 +109,9 @@ def _alerte_to_dict(item: AlertePanne, prod_rows: list | None = None) -> dict:
 def _production_rows_for_alerte(item: AlertePanne) -> list | None:
     if (item.equipe or "").strip() != "Berceau":
         return None
-    from .models import ProductionBerceau
+    from production.models import ProductionBerceau
 
-    rows = list(
-        ProductionBerceau.objects.filter(date=item.date, shift=item.shift).order_by("date", "shift", "id")
-    )
+    rows = list(ProductionBerceau.objects.filter(date=item.date).order_by("shift", "id"))
     return rows or []
 
 
@@ -325,10 +328,20 @@ def api_arrets_temps_auto(request):
     return JsonResponse({"temps_arret_min": total, "found": queryset.exists()})
 
 
+def _normalize_optional_moyen_id(raw) -> int | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
 def _build_alerte_from_payload(item: AlertePanne, payload: dict) -> AlertePanne:
     item.module_id = payload.get("module_id")
     item.poste_id = payload.get("poste_id")
-    item.moyen_id = payload.get("moyen_id")
+    item.moyen_id = _normalize_optional_moyen_id(payload.get("moyen_id"))
     item.panne_type_id = payload.get("panne_type_id")
     item.cause = (payload.get("cause") or "").strip()
     item.solution = (payload.get("solution") or "").strip()
@@ -356,12 +369,8 @@ def _validate_alerte_ccb_referentiel(
         return False, "poste_id requis."
     if module_id is None:
         return False, "module_id requis."
-    if moyen_raw is None or moyen_raw == "":
-        return False, "moyen_id requis."
-    try:
-        moyen_id_int = int(moyen_raw)
-    except (TypeError, ValueError):
-        return False, "moyen_id invalide."
+
+    moyen_id_int = _normalize_optional_moyen_id(moyen_raw)
 
     poste_qs = BerceauPoste.objects.select_related("module").filter(pk=poste_id)
     if patch_item is None:
@@ -373,19 +382,20 @@ def _validate_alerte_ccb_referentiel(
     if int(module_id) != poste.module_id:
         return False, "Le module ne correspond pas au poste selectionne."
 
-    moyen = BerceauMoyen.objects.filter(pk=moyen_id_int).first()
-    if not moyen:
-        return False, "Moyen inconnu."
-    if moyen.poste_id != int(poste_id):
-        return False, "Le moyen ne correspond pas au poste selectionne."
+    if moyen_id_int is not None:
+        moyen = BerceauMoyen.objects.filter(pk=moyen_id_int).first()
+        if not moyen:
+            return False, "Moyen inconnu."
+        if moyen.poste_id != int(poste_id):
+            return False, "Le moyen ne correspond pas au poste selectionne."
 
-    grandfather_moyen = patch_item is not None and patch_item.moyen_id == moyen_id_int
-    if patch_item is None or not grandfather_moyen:
-        if not moyen.is_active:
-            return False, "Moyen inactif ou non autorise."
-        allowed = ccb_allowed_moyens_for_poste(poste.name)
-        if moyen.name not in allowed:
-            return False, "Moyenne/module non autorise pour ce poste CCB."
+        grandfather_moyen = patch_item is not None and patch_item.moyen_id == moyen_id_int
+        if patch_item is None or not grandfather_moyen:
+            if not moyen.is_active:
+                return False, "Moyen inactif ou non autorise."
+            allowed = ccb_allowed_moyens_for_poste(poste.name)
+            if moyen.name not in allowed:
+                return False, "Moyenne/module non autorise pour ce poste CCB."
 
     if panne_type_id:
         pt = PanneType.objects.filter(pk=panne_type_id, is_active=True).first()
@@ -467,10 +477,14 @@ def api_alertes_pannes(request):
         try:
             page_obj = Paginator(queryset, per_page).get_page(page)
             items = list(page_obj)
-            prod_map = production_rows_map_for_berceau_alertes(items)
+            prod_by_date = production_rows_by_date_for_alertes(items)
             results = []
             for item in items:
-                pr = prod_map.get((item.date, item.shift), []) if (item.equipe or "").strip() == "Berceau" else None
+                pr = (
+                    prod_by_date.get(item.date, [])
+                    if (item.equipe or "").strip() == "Berceau"
+                    else None
+                )
                 results.append(_alerte_to_dict(item, pr))
             return JsonResponse(
                 {
@@ -603,6 +617,14 @@ def api_alertes_pannes_detail(request, pk):
     return HttpResponse(status=405)
 
 
+def _alerte_export_commentaire(item: AlertePanne) -> str:
+    """Commentaire affiché à l'export (sans tags import / diversité)."""
+    solution = (item.solution or "").strip()
+    if solution:
+        return solution
+    return comment_from_imported_cause(item.cause)
+
+
 def api_alertes_pannes_export(request):
     if not auth_can_do_action(request.user, "read"):
         return json_forbidden()
@@ -612,8 +634,7 @@ def api_alertes_pannes_export(request):
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     rows = list(filtered[:5000])
-    pairs = {(item.date, item.shift) for item in rows if (item.equipe or "").strip() == "Berceau"}
-    prod_map = production_rows_map_for_pairs(pairs)
+    prod_by_date = production_rows_by_date_for_alertes(rows)
     columns = [
         "date",
         "shift",
@@ -625,14 +646,13 @@ def api_alertes_pannes_export(request):
         "categorie",
         "temps_arret_min",
         "impact_pct",
-        "cause",
-        "solution",
+        "commentaire",
     ]
     data_rows = []
     for item in rows:
         berceau = (item.equipe or "").strip() == "Berceau"
         impact = (
-            round(berceau_alerte_impact_pct(item, prod_map.get((item.date, item.shift), [])), 6)
+            round(berceau_alerte_impact_pct(item, prod_by_date.get(item.date, [])), 6)
             if berceau
             else ""
         )
@@ -643,13 +663,12 @@ def api_alertes_pannes_export(request):
                 item.heure_production,
                 item.module.name,
                 item.poste.name,
-                item.moyen.name,
+                item.moyen.name if item.moyen_id else "",
                 item.panne_type.name,
                 ArretCategory(item.category).label if item.category else "",
                 item.temps_arret_min,
                 impact,
-                item.cause,
-                item.solution,
+                _alerte_export_commentaire(item),
             ]
         )
     if fmt == "excel":

@@ -2445,6 +2445,10 @@ class DowntimeImpactTests(TestCase):
 
     def test_parse_diversite_from_cause(self):
         self.assertEqual(parse_diversite_from_cause("[diversite:A3] Panne"), "A3")
+        self.assertEqual(
+            parse_diversite_from_cause("[import:NRO2026]:2026-05-17 [diversite:A1] Panne"),
+            "A1",
+        )
         self.assertIsNone(parse_diversite_from_cause("sans tag"))
 
     def test_hourly_objective_prefers_row_matching_diversity(self):
@@ -2509,3 +2513,12 @@ class DowntimeImpactTests(TestCase):
         )
         # (18 / 1.8) * (100 / 100) = 10
         self.assertAlmostEqual(berceau_alerte_impact_pct(alerte, [prod]), 10.0, places=6)
+
+    def test_berceau_alerte_impact_denominator_sums_all_shifts_same_day(self):
+        """Dénominateur = Σ objectifs H1–H8 sur les fiches A + B + N du jour."""
+        alerte = SimpleNamespace(cause="[diversite:A1] x", heure_production=1, temps_arret_min=13)
+        prod_a = SimpleNamespace(line_h1="A1", objectif_h1=50, line_h2="A1", objectif_h2=50)
+        prod_b = SimpleNamespace(line_h1="A1", objectif_h1=60, line_h2="A1", objectif_h2=40)
+        # un shift : (13/1.3)*(100/100)=10 ; deux shifts objectif 200 → 5 %
+        self.assertAlmostEqual(berceau_alerte_impact_pct(alerte, [prod_a]), 10.0, places=6)
+        self.assertAlmostEqual(berceau_alerte_impact_pct(alerte, [prod_a, prod_b]), 5.0, places=6)

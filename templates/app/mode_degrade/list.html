@@ -3,14 +3,13 @@
 {% block content %}
 <div class="card">
     <div class="toolbar">
-        <h2>Mode degrade{% if equipe_value != 'Berceau' %} - {{ equipe_value }}{% endif %}</h2>
+        <h2>Mode dégradé{% if equipe_value != 'Berceau' %} - {{ equipe_value }}{% endif %}</h2>
         <a href="{% url add_url_name %}" class="primary-btn">Ajouter</a>
     </div>
     <form method="get" class="toolbar">
-        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Recherche action/probleme/pilote/cause">
+        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Recherche action, problème, pilote, cause…">
         <input type="date" name="date" value="{{ request.GET.date }}">
-        <input type="text" name="shift" value="{{ request.GET.shift }}" placeholder="Shift">
-        <input type="text" name="statut" value="{{ request.GET.statut }}" placeholder="Statut">
+        <input type="text" name="shift" value="{{ request.GET.shift }}" placeholder="Équipe">
         <button type="submit" class="secondary-btn">Filtrer</button>
         <a href="?export=csv" class="secondary-btn">CSV</a>
         <a href="?export=excel" class="secondary-btn">Excel</a>
@@ -19,14 +18,12 @@
         <table>
             <thead>
                 <tr>
-                    <th>Shift</th>
+                    <th>Équipe</th>
                     <th>Action</th>
-                    <th>Probleme</th>
+                    <th>Problème</th>
                     <th>Pilote</th>
                     <th>Date</th>
-                    <th>Delai</th>
                     <th>Cause</th>
-                    <th>Statut</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -38,9 +35,7 @@
                         <td>{{ item.probleme }}</td>
                         <td>{{ item.pilote }}</td>
                         <td>{{ item.date|date:'Y-m-d' }}</td>
-                        <td>{{ item.delai|date:'Y-m-d' }}</td>
                         <td>{{ item.cause }}</td>
-                        <td>{{ item.statut }}</td>
                         <td>
                             <a href="{% url detail_url_name item.pk %}" class="secondary-btn">Detail</a>
                             <a href="{% url edit_url_name item.pk %}" class="secondary-btn">Modifier</a>
@@ -51,7 +46,7 @@
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="9" class="muted">Aucun element mode degrade enregistre.</td></tr>
+                    <tr><td colspan="7" class="muted">Aucun incident en mode dégradé.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

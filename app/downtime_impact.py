@@ -4,9 +4,8 @@ Formula (per arrêt):
     (T_arret / diviseur) * (100 / objectif_shift)
 
 - diviseur: A1 -> 1.3 min, A3 -> 1.8 min (diversité de l’arrêt, tag ou ligne à l’heure).
-- objectif_shift: somme des ``objectif_h1``…``objectif_h8`` sur les fiches production du
-  shift (chaque heure a déjà son objectif pour la ligne A1 ou A3 de cette heure ; la somme
-  sur 8 h = objectif du shift).
+- objectif_shift: somme des ``objectif_h1``…``objectif_h8`` sur **toutes** les fiches
+  production du jour (shifts A, B et N).
 
 Diversity resolution (diviseur uniquement):
 1) Explicit tag in cause: ``[diversite:A1]`` / ``[diversite:A3]``
@@ -28,7 +27,7 @@ Diversity = Literal["A1", "A3"]
 
 def parse_diversite_from_cause(cause: str | None) -> Diversity | None:
     raw = (cause or "").strip()
-    m = re.match(r"^\[diversite:(?P<d>[^\]]+)\]", raw, flags=re.IGNORECASE)
+    m = re.search(r"\[diversite:(?P<d>[^\]]+)\]", raw, flags=re.IGNORECASE)
     if not m:
         return None
     d = str(m.group("d") or "").strip().upper()
@@ -123,7 +122,9 @@ def downtime_impact_percent(temps_arret_min: int, diversity: str | None, objecti
 
 
 def berceau_alerte_impact_pct(alerte, prod_rows: list | None) -> float:
-    """Single alert row impact % (Berceau only); 0 if production missing or diversity unresolved."""
+    """
+    Impact % (Berceau). ``prod_rows`` = toutes les fiches production du jour (A+B+N).
+    """
     hour = int(getattr(alerte, "heure_production", 0) or 0)
     cause = getattr(alerte, "cause", None)
     div = resolve_diversity_for_impact(cause, prod_rows, hour)
@@ -153,3 +154,20 @@ def production_rows_map_for_pairs(pairs: set[tuple[date, str]]) -> dict[tuple[da
 def production_rows_map_for_berceau_alertes(alertes: list) -> dict[tuple[date, str], list]:
     pairs = {(a.date, a.shift) for a in alertes if (getattr(a, "equipe", None) or "").strip() == "Berceau"}
     return production_rows_map_for_pairs(pairs)
+
+
+def production_rows_by_date_for_alertes(alertes: list) -> dict[date, list]:
+    """Toutes les fiches production du jour (shifts A+B+N) pour le dénominateur impact %."""
+    from production.models import ProductionBerceau
+
+    dates = {a.date for a in alertes if (getattr(a, "equipe", None) or "").strip() == "Berceau"}
+    if not dates:
+        return {}
+    q = Q()
+    for d in dates:
+        q |= Q(date=d)
+    rows = list(ProductionBerceau.objects.filter(q).order_by("date", "shift", "id"))
+    out: dict[date, list] = {}
+    for r in rows:
+        out.setdefault(r.date, []).append(r)
+    return out

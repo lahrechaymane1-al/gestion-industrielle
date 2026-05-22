@@ -39,9 +39,7 @@ const mdSchema = z.object({
   probleme: z.string().min(1),
   pilote: z.string().min(1),
   date: z.string().min(1),
-  delai: z.string().min(1),
   cause: z.string().min(1),
-  statut: z.enum(["Ouvert", "En cours", "Clos"]),
 });
 
 type MdForm = z.infer<typeof mdSchema>;
@@ -55,20 +53,18 @@ export default function ModeDegradeListPage({ equipe }: { equipe: EquipeScope })
   const [rowsPerPage, setRowsPerPage] = useState(15);
   const [searchQuery, setSearchQuery] = useState("");
   const [shiftFilter, setShiftFilter] = useState("");
-  const [statutFilter, setStatutFilter] = useState("");
   const effectiveShift = lockedShift ?? shiftFilter;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ModeDegradeRow | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["mode-degrade", equipe, page, rowsPerPage, effectiveShift, statutFilter, searchQuery, lockedShift],
+    queryKey: ["mode-degrade", equipe, page, rowsPerPage, effectiveShift, searchQuery, lockedShift],
     queryFn: async () => {
       const { data: res } = await api.get<Paginated<ModeDegradeRow>>("/api/mode-degrade/", {
         params: {
           equipe,
           ...(effectiveShift ? { shift: effectiveShift } : {}),
-          ...(statutFilter ? { statut: statutFilter } : {}),
           ...(searchQuery.trim() ? { q: searchQuery.trim() } : {}),
           page: page + 1,
           per_page: rowsPerPage,
@@ -87,23 +83,19 @@ export default function ModeDegradeListPage({ equipe }: { equipe: EquipeScope })
       probleme: "",
       pilote: "",
       date: isoCalendarToday(),
-      delai: isoCalendarToday(),
       cause: "",
-      statut: "Ouvert",
     },
   });
 
   useEffect(() => {
     if (editing) {
       form.reset({
-        shift: ((lockedShift ?? editing.shift) as "A" | "B" | "N"),
+        shift: (lockedShift ?? editing.shift) as "A" | "B" | "N",
         action: editing.action,
         probleme: editing.probleme,
         pilote: editing.pilote,
         date: editing.date.slice(0, 10),
-        delai: editing.delai.slice(0, 10),
         cause: editing.cause,
-        statut: editing.statut as MdForm["statut"],
       });
     } else {
       form.reset({
@@ -112,15 +104,13 @@ export default function ModeDegradeListPage({ equipe }: { equipe: EquipeScope })
         probleme: "",
         pilote: "",
         date: isoCalendarToday(),
-        delai: isoCalendarToday(),
         cause: "",
-        statut: "Ouvert",
       });
     }
   }, [editing, form, lockedShift]);
 
   const saveMutation = useMutation({
-    mutationFn: async (payload: MdForm & { equipe: EquipeScope }) => {
+    mutationFn: async (payload: MdForm & { equipe: EquipeScope; statut: string }) => {
       if (editing) {
         await api.patch(`/api/mode-degrade/${editing.id}/`, payload);
       } else {
@@ -143,15 +133,14 @@ export default function ModeDegradeListPage({ equipe }: { equipe: EquipeScope })
 
   const exportHref = `/api/mode-degrade/?equipe=${encodeURIComponent(equipe)}&export=excel${
     effectiveShift ? `&shift=${encodeURIComponent(effectiveShift)}` : ""
-  }${statutFilter ? `&statut=${encodeURIComponent(statutFilter)}` : ""}${
-    searchQuery.trim() ? `&q=${encodeURIComponent(searchQuery.trim())}` : ""
-  }`;
+  }${searchQuery.trim() ? `&q=${encodeURIComponent(searchQuery.trim())}` : ""}`;
 
   const onSubmit = form.handleSubmit((values) =>
     saveMutation.mutate({
       ...values,
       equipe,
       shift: (lockedShift ?? values.shift) as "A" | "B" | "N",
+      statut: editing?.statut ?? "Ouvert",
     })
   );
 
@@ -159,11 +148,11 @@ export default function ModeDegradeListPage({ equipe }: { equipe: EquipeScope })
     <Stack spacing={2}>
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }}>
         <Typography variant="h5" fontWeight={800}>
-          Mode degrade · UEP {equipe}
+          Mode dégradé · UEP {equipe}
         </Typography>
         <Stack direction="row" spacing={1}>
           <Button component="a" href={exportHref} variant="outlined" size="small">
-            Export Excel
+            Exporter Excel
           </Button>
           <Button
             startIcon={<AddIcon />}
@@ -198,7 +187,7 @@ export default function ModeDegradeListPage({ equipe }: { equipe: EquipeScope })
         <TextField
           select
           size="small"
-          label="Shift"
+          label="Équipe"
           id="md-filter-shift"
           value={lockedShift ?? shiftFilter}
           disabled={!!lockedShift}
@@ -213,43 +202,24 @@ export default function ModeDegradeListPage({ equipe }: { equipe: EquipeScope })
           <MenuItem value="B">B</MenuItem>
           <MenuItem value="N">N</MenuItem>
         </TextField>
-        <TextField
-          select
-          size="small"
-          label="Statut"
-          id="md-filter-statut"
-          value={statutFilter}
-          onChange={(e) => {
-            setStatutFilter(e.target.value);
-            setPage(0);
-          }}
-          sx={{ minWidth: 130 }}
-        >
-          <MenuItem value="">Tous</MenuItem>
-          <MenuItem value="Ouvert">Ouvert</MenuItem>
-          <MenuItem value="En cours">En cours</MenuItem>
-          <MenuItem value="Clos">Clos</MenuItem>
-        </TextField>
       </Stack>
       <TableContainer component={Paper} elevation={0} sx={{ border: "1px solid", borderColor: "divider", borderRadius: 3 }}>
         <Table size="small">
           <TableHead>
             <TableRow sx={{ bgcolor: "action.hover" }}>
-              <TableCell>Shift</TableCell>
-              <TableCell>Probleme</TableCell>
+              <TableCell>Équipe</TableCell>
+              <TableCell>Problème</TableCell>
               <TableCell>Action</TableCell>
               <TableCell>Pilote</TableCell>
               <TableCell>Date</TableCell>
-              <TableCell>Delai</TableCell>
-              <TableCell>Statut</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={8}>
-                  <Typography color="text.secondary">Chargement...</Typography>
+                <TableCell colSpan={6}>
+                  <Typography color="text.secondary">Chargement…</Typography>
                 </TableCell>
               </TableRow>
             )}
@@ -261,8 +231,6 @@ export default function ModeDegradeListPage({ equipe }: { equipe: EquipeScope })
                   <TableCell sx={{ maxWidth: 200 }}>{row.action}</TableCell>
                   <TableCell>{row.pilote}</TableCell>
                   <TableCell>{row.date.slice(0, 10)}</TableCell>
-                  <TableCell>{row.delai.slice(0, 10)}</TableCell>
-                  <TableCell>{row.statut}</TableCell>
                   <TableCell align="right">
                     <IconButton
                       size="small"
@@ -279,7 +247,7 @@ export default function ModeDegradeListPage({ equipe }: { equipe: EquipeScope })
                         size="small"
                         color="error"
                         onClick={() => {
-                          if (window.confirm("Supprimer cet element ?")) deleteMutation.mutate(row.id);
+                          if (window.confirm("Supprimer cet élément ?")) deleteMutation.mutate(row.id);
                         }}
                       >
                         <DeleteOutlineIcon fontSize="small" />
@@ -290,7 +258,7 @@ export default function ModeDegradeListPage({ equipe }: { equipe: EquipeScope })
               ))}
             {!isLoading && data?.results.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8}>
+                <TableCell colSpan={6}>
                   <Typography color="text.secondary">Aucun incident en mode dégradé.</Typography>
                 </TableCell>
               </TableRow>
@@ -312,37 +280,27 @@ export default function ModeDegradeListPage({ equipe }: { equipe: EquipeScope })
       </TableContainer>
 
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>{editing ? "Modifier" : "Ajouter"} mode degrade</DialogTitle>
+        <DialogTitle>{editing ? "Modifier" : "Ajouter"} un mode dégradé</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                select
-                label="Shift"
-                fullWidth
-                disabled={!!lockedShift}
-                helperText={lockedShift ? "Shift impose (profil PSP)" : undefined}
-                {...form.register("shift")}
-              >
-                {(lockedShift ? ([lockedShift] as const) : (["A", "B", "N"] as const)).map((s) => (
-                  <MenuItem key={s} value={s}>
-                    {s}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField select label="Statut" fullWidth {...form.register("statut")}>
-                <MenuItem value="Ouvert">Ouvert</MenuItem>
-                <MenuItem value="En cours">En cours</MenuItem>
-                <MenuItem value="Clos">Clos</MenuItem>
-              </TextField>
-            </Stack>
-            <TextField label="Probleme" fullWidth multiline minRows={2} {...form.register("probleme")} />
+            <TextField
+              select
+              label="Équipe"
+              fullWidth
+              disabled={!!lockedShift}
+              helperText={lockedShift ? "Équipe imposée (profil PSP)" : undefined}
+              {...form.register("shift")}
+            >
+              {(lockedShift ? ([lockedShift] as const) : (["A", "B", "N"] as const)).map((s) => (
+                <MenuItem key={s} value={s}>
+                  {s}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField label="Problème" fullWidth multiline minRows={2} {...form.register("probleme")} />
             <TextField label="Action" fullWidth multiline minRows={2} {...form.register("action")} />
             <TextField label="Pilote" fullWidth {...form.register("pilote")} />
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <GiDatePickerRhf control={form.control} name="date" label="Date" fullWidth />
-              <GiDatePickerRhf control={form.control} name="delai" label="Delai" fullWidth />
-            </Stack>
+            <GiDatePickerRhf control={form.control} name="date" label="Date" fullWidth />
             <TextField label="Cause" fullWidth multiline minRows={2} {...form.register("cause")} />
           </Stack>
         </DialogContent>

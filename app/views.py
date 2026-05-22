@@ -457,10 +457,12 @@ def _mode_degrade_list(request, equipe, active_page, title, add_url_name, edit_u
         items = items.filter(
             Q(action__icontains=q) | Q(probleme__icontains=q) | Q(pilote__icontains=q) | Q(cause__icontains=q)
         )
-    for field in ("shift", "statut"):
+    for field in ("shift",):
         value = (request.GET.get(field) or "").strip()
         if value:
             items = items.filter(**{field: value})
+    if request.GET.get("statut"):
+        items = items.filter(statut=request.GET["statut"].strip())
     if request.GET.get("date"):
         items = items.filter(date=request.GET["date"].strip())
     sort = request.GET.get("sort", "-date")
@@ -470,9 +472,16 @@ def _mode_degrade_list(request, equipe, active_page, title, add_url_name, edit_u
 
     export_format = (request.GET.get("export") or "").lower().strip()
     if export_format in {"csv", "excel"}:
-        headers = ["Shift", "Action", "Probleme", "Pilote", "Date", "Delai", "Cause", "Statut"]
+        headers = ["Équipe", "Action", "Problème", "Pilote", "Date", "Cause"]
         rows = [
-            [i.shift, i.action, i.probleme, i.pilote, i.date.strftime("%Y-%m-%d"), i.delai.strftime("%Y-%m-%d"), i.cause, i.statut]
+            [
+                i.shift,
+                i.action,
+                i.probleme,
+                i.pilote,
+                i.date.strftime("%Y-%m-%d"),
+                i.cause,
+            ]
             for i in items
         ]
         if export_format == "csv":
@@ -486,7 +495,7 @@ def _mode_degrade_list(request, equipe, active_page, title, add_url_name, edit_u
             return response
         workbook = Workbook()
         sheet = workbook.active
-        sheet.title = f"Mode degrade {equipe}"
+        sheet.title = f"Mode dégradé {equipe}"
         sheet.append(headers)
         for row in rows:
             sheet.append(row)
@@ -1477,10 +1486,12 @@ def api_absence_detail(request, pk):
 
 def _api_mode_degrade_queryset(request):
     queryset = ModeDegrade.objects.filter(is_deleted=False)
-    for field in ("equipe", "shift", "statut"):
+    for field in ("equipe", "shift"):
         value = (request.GET.get(field) or "").strip()
         if value:
             queryset = queryset.filter(**{field: value})
+    if request.GET.get("statut"):
+        queryset = queryset.filter(statut=request.GET["statut"].strip())
     if request.GET.get("date"):
         queryset = queryset.filter(date=request.GET["date"].strip())
     q = (request.GET.get("q") or "").strip()
@@ -1529,7 +1540,7 @@ def api_mode_degrade(request):
                     return JsonResponse({"error": "Parametre equipe requis pour l'export."}, status=400)
                 if not ensure_equipe_allowed(request.user, equipe_val, endpoint="api_mode_degrade GET export"):
                     return JsonResponse({"error": "Acces refuse."}, status=403)
-                headers = ["Shift", "Action", "Probleme", "Pilote", "Date", "Delai", "Cause", "Statut"]
+                headers = ["Équipe", "Action", "Problème", "Pilote", "Date", "Cause"]
                 rows = [
                     [
                         i.shift,
@@ -1537,9 +1548,7 @@ def api_mode_degrade(request):
                         i.probleme,
                         i.pilote,
                         i.date.strftime("%Y-%m-%d"),
-                        i.delai.strftime("%Y-%m-%d"),
                         i.cause,
-                        i.statut,
                     ]
                     for i in queryset[:5000]
                 ]
@@ -1554,7 +1563,7 @@ def api_mode_degrade(request):
                     return response
                 workbook = Workbook()
                 sheet = workbook.active
-                sheet.title = f"Mode degrade {equipe_val}"
+                sheet.title = f"Mode dégradé {equipe_val}"
                 sheet.append(headers)
                 for row in rows:
                     sheet.append(row)
@@ -1574,7 +1583,7 @@ def api_mode_degrade(request):
                     "results": [
                         model_to_dict(
                             item,
-                            fields=["id", "equipe", "shift", "action", "probleme", "pilote", "date", "delai", "cause", "statut", "created_at"],
+                            fields=["id", "equipe", "shift", "action", "probleme", "pilote", "date", "cause", "statut", "created_at"],
                         )
                         for item in page_obj
                     ],
@@ -1599,7 +1608,7 @@ def api_mode_degrade_detail(request, pk):
             return JsonResponse(
                 model_to_dict(
                     item,
-                    fields=["id", "equipe", "shift", "action", "probleme", "pilote", "date", "delai", "cause", "statut", "created_at"],
+                    fields=["id", "equipe", "shift", "action", "probleme", "pilote", "date", "cause", "statut", "created_at"],
                 )
             )
         if request.method in {"PUT", "PATCH"}:

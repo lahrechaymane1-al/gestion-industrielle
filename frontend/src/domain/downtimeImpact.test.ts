@@ -15,6 +15,7 @@ import {
 describe("downtimeImpact", () => {
   it("parses diversity prefix from cause", () => {
     expect(parseDiversiteFromCause("[diversite:A3] libellé")).toBe("A3");
+    expect(parseDiversiteFromCause("[import:NRO2026]:2026-05-17 [diversite:A1] Panne")).toBe("A1");
     expect(parseDiversiteFromCause("pas de tag")).toBeNull();
   });
 

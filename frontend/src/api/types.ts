@@ -72,7 +72,6 @@ export interface ModeDegradeRow {
   probleme: string;
   pilote: string;
   date: string;
-  delai: string;
   cause: string;
   statut: string;
   created_at: string;
@@ -221,7 +220,7 @@ export interface AlertePanneRow {
   module_nom: string;
   poste_id: number;
   poste_nom: string;
-  moyen_id: number;
+  moyen_id: number | null;
   moyen_nom: string;
   panne_type_id: number;
   panne_type_nom: string;

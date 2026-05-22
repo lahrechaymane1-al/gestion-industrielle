@@ -583,7 +583,7 @@ class Command(BaseCommand):
                     date=day,
                     delai=day + timedelta(days=2),
                     cause="Analyse cause (donnees initiales)",
-                    statut=["Ouvert", "En cours", "Clos"][d % 3],
+                    statut=["Ouvert", "En cours", "Fermer"][d % 3],
                     updated_by=user,
                     is_deleted=False,
                 )

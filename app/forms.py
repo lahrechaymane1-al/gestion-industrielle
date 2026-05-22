@@ -315,7 +315,7 @@ class AbsenceForm(forms.ModelForm):
 class ModeDegradeForm(forms.ModelForm):
     class Meta:
         model = ModeDegrade
-        fields = ["shift", "action", "probleme", "pilote", "date", "delai", "cause", "statut"]
+        fields = ["shift", "action", "probleme", "pilote", "date", "cause"]
         widgets = {
             "date": forms.DateInput(
                 attrs={
@@ -325,12 +325,14 @@ class ModeDegradeForm(forms.ModelForm):
                     "autocomplete": "off",
                 }
             ),
-            "delai": forms.DateInput(
-                attrs={
-                    "type": "date",
-                    "class": "date-picker-input",
-                    "data-open-picker": "true",
-                    "autocomplete": "off",
-                }
-            ),
         }
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if not instance.statut:
+            instance.statut = "Ouvert"
+        if not instance.delai:
+            instance.delai = instance.date
+        if commit:
+            instance.save()
+        return instance

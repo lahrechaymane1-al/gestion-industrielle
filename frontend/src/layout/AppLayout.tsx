@@ -42,7 +42,7 @@ const SOFT_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 const berceauLinks = [
   { to: "/berceau/production", label: "Production", icon: <PrecisionManufacturingOutlinedIcon /> },
   { to: "/berceau/dashboard", label: "Dashboard", icon: <ArticleOutlinedIcon /> },
-  { to: "/berceau/mode-degrade", label: "Mode degrade", icon: <WarningAmberOutlinedIcon /> },
+  { to: "/berceau/mode-degrade", label: "Mode dégradé", icon: <WarningAmberOutlinedIcon /> },
   { to: "/berceau/absence", label: "Absence", icon: <ArticleOutlinedIcon /> },
   { to: "/berceau/effectif", label: "Effectif", icon: <GroupsOutlinedIcon /> },
   { to: "/berceau/stock", label: "Stock", icon: <ArticleOutlinedIcon /> },
@@ -51,7 +51,7 @@ const berceauLinks = [
 
 const ccbLinks = [
   { to: "/ccb/production", label: "Production", icon: <PrecisionManufacturingOutlinedIcon /> },
-  { to: "/ccb/mode-degrade", label: "Mode degrade", icon: <WarningAmberOutlinedIcon /> },
+  { to: "/ccb/mode-degrade", label: "Mode dégradé", icon: <WarningAmberOutlinedIcon /> },
   { to: "/ccb/absence", label: "Absence", icon: <ArticleOutlinedIcon /> },
   { to: "/ccb/effectif", label: "Effectif", icon: <GroupsOutlinedIcon /> },
   { to: "/ccb/stock", label: "Stock", icon: <ArticleOutlinedIcon /> },

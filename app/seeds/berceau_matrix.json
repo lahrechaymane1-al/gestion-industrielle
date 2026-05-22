@@ -1,33 +1,137 @@
 {
   "modules": [
     {
-      "name": "OP05",
+      "name": "Module OP05",
       "postes": [
-        {"name": "OP05", "a1_enabled": true, "a3_enabled": true, "moyens": ["Maquette", "R1", "R2"]}
+        {
+          "name": "OP05",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Maquette", "R1", "R2"]
+        }
       ]
     },
     {
       "name": "Module 1",
       "postes": [
-        {"name": "OP10/20", "a1_enabled": true, "a3_enabled": true, "moyens": ["Maquette", "R20", "R21", "R1", "R2"]},
-        {"name": "OP25", "a1_enabled": true, "a3_enabled": true, "moyens": ["PRP"]},
-        {"name": "OP30", "a1_enabled": true, "a3_enabled": true, "moyens": ["Pince", "R20"]},
-        {"name": "OP35", "a1_enabled": true, "a3_enabled": true, "moyens": ["R20", "R21"]},
-        {"name": "OP40", "a1_enabled": true, "a3_enabled": true, "moyens": ["Maquette", "R20"]},
-        {"name": "OP50", "a1_enabled": true, "a3_enabled": true, "moyens": ["Pince", "R21"]},
-        {"name": "OP55", "a1_enabled": true, "a3_enabled": true, "moyens": ["Convoyeur", "R21"]},
-        {"name": "OP60", "a1_enabled": true, "a3_enabled": true, "moyens": ["Maquette", "R21", "R1", "R2"]}
+        {
+          "name": "OP10/20",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Rideau", "Maquette 10", "Maquette 20", "R20", "R1", "R2"]
+        },
+        {
+          "name": "OP25",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["PRP"]
+        },
+        {
+          "name": "OP30",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Pince", "R20"]
+        },
+        {
+          "name": "OP35",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["R20", "R21"]
+        },
+        {
+          "name": "OP40",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Rideau", "Maquette 41", "Maquette 42", "R20"]
+        },
+        {
+          "name": "OP50",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Pince 1", "Pince 2", "R21"]
+        },
+        {
+          "name": "OP55",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Convoyeur", "R21"]
+        },
+        {
+          "name": "OP60",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Maquette", "Rideau", "R21", "R1", "R2"]
+        },
+        {
+          "name": "M1",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Elévateur", "Porte"]
+        }
       ]
     },
     {
       "name": "Module 2",
       "postes": [
-        {"name": "OP70", "a1_enabled": true, "a3_enabled": true, "moyens": ["Poinçoneuse", "R21"]},
-        {"name": "OP75", "a1_enabled": true, "a3_enabled": true, "moyens": ["Convoyeur", "R20"]},
-        {"name": "OP80", "a1_enabled": true, "a3_enabled": true, "moyens": ["Maquette", "R20", "R1", "R2"]},
-        {"name": "OP90", "a1_enabled": true, "a3_enabled": true, "moyens": ["Convoyeur", "R20", "R20", "R21"]},
-        {"name": "OP100", "a1_enabled": false, "a3_enabled": true, "moyens": ["Maquette"]},
-        {"name": "OP105", "a1_enabled": true, "a3_enabled": true, "moyens": ["Maquette", "R21", "R42", "R43", "R44", "R45"]}
+        {
+          "name": "OP70",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Poinçonneuse", "R20", "R21"]
+        },
+        {
+          "name": "OP75",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Convoyeur", "R20"]
+        },
+        {
+          "name": "OP80",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Maquette", "Rideau", "R20", "R1", "R2"]
+        },
+        {
+          "name": "OP90",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Convoyeur", "Manipulateur", "R20", "R21"]
+        },
+        {
+          "name": "OP95",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["R20", "R21"]
+        },
+        {
+          "name": "OP100",
+          "a1_enabled": false,
+          "a3_enabled": true,
+          "moyens": ["Maquette"]
+        },
+        {
+          "name": "OP105",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Maquette", "R21", "R1", "R2", "R3", "R4"]
+        },
+        {
+          "name": "M2",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": ["Elévateur", "Porte"]
+        }
+      ]
+    },
+    {
+      "name": "Ligne",
+      "postes": [
+        {
+          "name": "M1/M2",
+          "a1_enabled": true,
+          "a3_enabled": true,
+          "moyens": []
+        }
       ]
     }
   ]
