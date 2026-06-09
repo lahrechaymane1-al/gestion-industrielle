@@ -22,6 +22,23 @@ from django.db.models import Q
 DIVISOR_A1 = 1.3
 DIVISOR_A3 = 1.8
 
+
+def _default_divisors() -> tuple[float, float]:
+    return DIVISOR_A1, DIVISOR_A3
+
+
+def get_berceau_divisors_for_date(as_of: date | None) -> tuple[float, float]:
+    """Diviseurs en vigueur à la date ``as_of`` (référentiel versionné, repli sur constantes)."""
+    if as_of is None:
+        return _default_divisors()
+    try:
+        from production.models import BerceauImpactSettings
+
+        row = BerceauImpactSettings.get_for_date(as_of)
+        return float(row.divisor_a1), float(row.divisor_a3)
+    except Exception:
+        return _default_divisors()
+
 Diversity = Literal["A1", "A3"]
 
 
@@ -95,21 +112,42 @@ def total_objectif_all_hours(prod_rows: list | None) -> int:
     return total
 
 
-def divisor_for_diversity(diversity: str | None) -> float | None:
+def divisor_for_diversity(
+    diversity: str | None,
+    *,
+    as_of: date | None = None,
+    divisor_a1: float | None = None,
+    divisor_a3: float | None = None,
+) -> float | None:
+    if divisor_a1 is None or divisor_a3 is None:
+        divisor_a1, divisor_a3 = get_berceau_divisors_for_date(as_of)
     if diversity == "A1":
-        return DIVISOR_A1
+        return divisor_a1
     if diversity == "A3":
-        return DIVISOR_A3
+        return divisor_a3
     return None
 
 
-def downtime_impact_percent(temps_arret_min: int, diversity: str | None, objectif_shift: int) -> float:
+def downtime_impact_percent(
+    temps_arret_min: int,
+    diversity: str | None,
+    objectif_shift: int,
+    *,
+    as_of: date | None = None,
+    divisor_a1: float | None = None,
+    divisor_a3: float | None = None,
+) -> float:
     """
     (T.arret / diviseur) * (100 / objectif_shift)
     ``objectif_shift`` = somme des objectifs horaires H1–H8 (fiches du shift).
     Returns 0 when diversity unknown, objectif <= 0, or invalid input.
     """
-    div = divisor_for_diversity(diversity)
+    div = divisor_for_diversity(
+        diversity,
+        as_of=as_of,
+        divisor_a1=divisor_a1,
+        divisor_a3=divisor_a3,
+    )
     if div is None:
         return 0.0
     obj = float(objectif_shift or 0)
@@ -131,7 +169,13 @@ def berceau_alerte_impact_pct(alerte, prod_rows: list | None) -> float:
     if not div:
         return 0.0
     obj = total_objectif_all_hours(prod_rows)
-    return downtime_impact_percent(int(getattr(alerte, "temps_arret_min", 0) or 0), div, obj)
+    as_of = getattr(alerte, "date", None)
+    return downtime_impact_percent(
+        int(getattr(alerte, "temps_arret_min", 0) or 0),
+        div,
+        obj,
+        as_of=as_of,
+    )
 
 
 def production_rows_map_for_pairs(pairs: set[tuple[date, str]]) -> dict[tuple[date, str], list]:

@@ -1,7 +1,16 @@
 from django.urls import re_path
 from django.views.generic import RedirectView
 
-from . import api_auth_views, api_panne_views, api_production_views, api_stock_views, page_views, react_views, views
+from . import (
+    api_auth_views,
+    api_consommable_views,
+    api_panne_views,
+    api_production_views,
+    api_stock_views,
+    page_views,
+    react_views,
+    views,
+)
 from absence_ccb import views as absence_ccb_views
 from effectif_ccb import views as effectif_ccb_views
 from mode_degrade_ccb import views as mode_degrade_ccb_views
@@ -57,6 +66,7 @@ urlpatterns = [
     re_path(r"^berceau/effectif/delete/(?P<pk>\d+)/?$", views.berceau_effectif_delete, name="berceau_effectif_delete"),
     re_path(r"^berceau/stock/?$", react_views.react_app, name="berceau_stock"),
     re_path(r"^berceau/arret/?$", react_views.react_app, name="berceau_arret"),
+    re_path(r"^berceau/consommable/?$", react_views.react_app, name="berceau_consommable"),
     re_path(r"^ccb/production/?$", react_views.react_app, name="ccb_production"),
     re_path(r"^ccb/production/export/?$", views.ccb_production_export, name="ccb_production_export"),
     re_path(r"^ccb/production/add/?$", views.ccb_production_add, name="ccb_production_add"),
@@ -80,6 +90,7 @@ urlpatterns = [
     re_path(r"^ccb/effectif/delete/(?P<pk>\d+)/?$", effectif_ccb_views.delete_view, name="ccb_effectif_delete"),
     re_path(r"^ccb/stock/?$", react_views.react_app, name="ccb_stock"),
     re_path(r"^ccb/arret/?$", react_views.react_app, name="ccb_arret"),
+    re_path(r"^ccb/consommable/?$", react_views.react_app, name="ccb_consommable"),
     re_path(r"^api/effectifs/?$", views.api_effectifs, name="api_effectifs"),
     re_path(r"^api/effectifs/options/?$", views.api_effectif_options, name="api_effectif_options"),
     re_path(r"^api/effectifs/(?P<pk>\d+)/?$", views.api_effectif_detail, name="api_effectif_detail"),
@@ -98,7 +109,22 @@ urlpatterns = [
         api_production_views.api_production_berceau_validate_hour,
         name="api_production_berceau_validate_hour",
     ),
+    re_path(
+        r"^api/berceau/impact-settings/?$",
+        api_production_views.api_berceau_impact_settings,
+        name="api_berceau_impact_settings",
+    ),
+    re_path(
+        r"^api/berceau/production-settings/?$",
+        api_production_views.api_berceau_production_settings,
+        name="api_berceau_production_settings",
+    ),
     re_path(r"^api/ccb/production/?$", api_production_views.api_production_ccb, name="api_production_ccb"),
+    re_path(
+        r"^api/ccb/production-settings/?$",
+        api_production_views.api_ccb_production_settings,
+        name="api_ccb_production_settings",
+    ),
     re_path(
         r"^api/dashboard/ro-nro-trend/?$",
         api_production_views.api_dashboard_ro_nro_trend,
@@ -156,6 +182,24 @@ urlpatterns = [
     ),
     re_path(r"^api/stock/journal/?$", api_stock_views.api_stock_journal, name="api_stock_journal"),
     re_path(r"^api/stock/journal/update/?$", api_stock_views.api_stock_journal_update, name="api_stock_journal_update"),
+    re_path(r"^api/consommables/items/?$", api_consommable_views.api_consommable_items, name="api_consommable_items"),
+    re_path(r"^api/consommables/types/?$", api_consommable_views.api_consommable_types, name="api_consommable_types"),
+    re_path(
+        r"^api/consommables/items/(?P<pk>\d+)/?$",
+        api_consommable_views.api_consommable_items_detail,
+        name="api_consommable_items_detail",
+    ),
+    re_path(
+        r"^api/consommables/purchases/?$",
+        api_consommable_views.api_consommable_purchases,
+        name="api_consommable_purchases",
+    ),
+    re_path(
+        r"^api/consommables/purchases/(?P<pk>\d+)/?$",
+        api_consommable_views.api_consommable_purchases_detail,
+        name="api_consommable_purchases_detail",
+    ),
+    re_path(r"^api/consommables/stats/?$", api_consommable_views.api_consommable_stats, name="api_consommable_stats"),
 
     # ----------------------------
     # Back-compat redirects

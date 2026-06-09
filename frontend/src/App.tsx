@@ -9,6 +9,7 @@ import CcbProductionPage from "./pages/production/CcbProductionPage";
 import AlertePanneBerceauPage from "./pages/arret/AlertePanneBerceauPage";
 import ProductionDashboardPage from "./pages/dashboard/ProductionDashboardPage";
 import StockJournalPage from "./pages/stock/StockJournalPage";
+import ConsommablePage from "./pages/consommable/ConsommablePage";
 
 export default function App() {
   return (
@@ -22,12 +23,14 @@ export default function App() {
         <Route path="berceau/mode-degrade" element={<ModeDegradeListPage equipe="Berceau" />} />
         <Route path="berceau/stock" element={<StockJournalPage equipe="Berceau" />} />
         <Route path="berceau/arret" element={<AlertePanneBerceauPage equipe="Berceau" />} />
+        <Route path="berceau/consommable" element={<ConsommablePage equipe="Berceau" />} />
         <Route path="ccb/production" element={<CcbProductionPage />} />
         <Route path="ccb/absence" element={<AbsenceListPage equipe="CCB" />} />
         <Route path="ccb/effectif" element={<EffectifListPage equipe="CCB" />} />
         <Route path="ccb/mode-degrade" element={<ModeDegradeListPage equipe="CCB" />} />
         <Route path="ccb/stock" element={<StockJournalPage equipe="CCB" />} />
         <Route path="ccb/arret" element={<AlertePanneBerceauPage equipe="CCB" />} />
+        <Route path="ccb/consommable" element={<ConsommablePage equipe="CCB" />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     'arret_ccb.apps.ArretCcbConfig',
     'stock.apps.StockConfig',
     'stock_ccb.apps.StockCcbConfig',
+    'consommable.apps.ConsommableConfig',
     'app',
 ]
 

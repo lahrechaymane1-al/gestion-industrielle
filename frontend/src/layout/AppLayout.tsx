@@ -1,11 +1,15 @@
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import HomeRoundedIcon from "@mui/icons-material/HomeRounded";
-import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
+import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined";
+import EventBusyOutlinedIcon from "@mui/icons-material/EventBusyOutlined";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
+import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import PrecisionManufacturingOutlinedIcon from "@mui/icons-material/PrecisionManufacturingOutlined";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
+import ShoppingCartOutlinedIcon from "@mui/icons-material/ShoppingCartOutlined";
 import {
   Alert,
   AppBar,
@@ -42,21 +46,23 @@ const SOFT_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 const berceauLinks = [
   { to: "/berceau/production", label: "Production", icon: <PrecisionManufacturingOutlinedIcon /> },
-  { to: "/berceau/dashboard", label: "Dashboard", icon: <ArticleOutlinedIcon /> },
+  { to: "/berceau/dashboard", label: "Dashboard", icon: <SpaceDashboardOutlinedIcon /> },
   { to: "/berceau/mode-degrade", label: "Mode dégradé", icon: <WarningAmberOutlinedIcon /> },
-  { to: "/berceau/absence", label: "Absence", icon: <ArticleOutlinedIcon /> },
+  { to: "/berceau/absence", label: "Absence", icon: <EventBusyOutlinedIcon /> },
   { to: "/berceau/effectif", label: "Effectif", icon: <GroupsOutlinedIcon /> },
-  { to: "/berceau/stock", label: "Stock", icon: <ArticleOutlinedIcon /> },
-  { to: "/berceau/arret", label: "Arret", icon: <WarningAmberOutlinedIcon /> },
+  { to: "/berceau/stock", label: "Stock", icon: <Inventory2OutlinedIcon /> },
+  { to: "/berceau/arret", label: "Arret", icon: <NotificationsActiveOutlinedIcon /> },
+  { to: "/berceau/consommable", label: "Consommable", icon: <ShoppingCartOutlinedIcon /> },
 ];
 
 const ccbLinks = [
   { to: "/ccb/production", label: "Production", icon: <PrecisionManufacturingOutlinedIcon /> },
   { to: "/ccb/mode-degrade", label: "Mode dégradé", icon: <WarningAmberOutlinedIcon /> },
-  { to: "/ccb/absence", label: "Absence", icon: <ArticleOutlinedIcon /> },
+  { to: "/ccb/absence", label: "Absence", icon: <EventBusyOutlinedIcon /> },
   { to: "/ccb/effectif", label: "Effectif", icon: <GroupsOutlinedIcon /> },
-  { to: "/ccb/stock", label: "Stock", icon: <ArticleOutlinedIcon /> },
-  { to: "/ccb/arret", label: "Arret", icon: <WarningAmberOutlinedIcon /> },
+  { to: "/ccb/stock", label: "Stock", icon: <Inventory2OutlinedIcon /> },
+  { to: "/ccb/arret", label: "Arret", icon: <NotificationsActiveOutlinedIcon /> },
+  { to: "/ccb/consommable", label: "Consommable", icon: <ShoppingCartOutlinedIcon /> },
 ];
 
 function NavSection({
@@ -157,8 +163,14 @@ export default function AppLayout() {
   const canSeeBerceau = !isPsp || pspEquipe === "BERCEAU";
   const canSeeCcb = !isPsp || pspEquipe === "CCB";
   const pspMissingScope = isPsp && !canSeeBerceau && !canSeeCcb;
-  const visibleBerceauLinks = useMemo(() => (canSeeBerceau ? berceauLinks : []), [canSeeBerceau]);
-  const visibleCcbLinks = useMemo(() => (canSeeCcb ? ccbLinks : []), [canSeeCcb]);
+  const visibleBerceauLinks = useMemo(
+    () => (canSeeBerceau ? berceauLinks.filter((l) => !(isPsp && l.to.includes("/consommable"))) : []),
+    [canSeeBerceau, isPsp]
+  );
+  const visibleCcbLinks = useMemo(
+    () => (canSeeCcb ? ccbLinks.filter((l) => !(isPsp && l.to.includes("/consommable"))) : []),
+    [canSeeCcb, isPsp]
+  );
   const allVisibleLinks = useMemo(
     () => [...visibleBerceauLinks, ...visibleCcbLinks],
     [visibleBerceauLinks, visibleCcbLinks]
@@ -525,9 +537,17 @@ export default function AppLayout() {
               border: { xs: "none", md: `1px solid ${alpha(theme.palette.common.white, 0.06)}` },
             }}
           >
-            <RouteErrorBoundary>
-              <Outlet />
-            </RouteErrorBoundary>
+            <Box
+              key={location.pathname}
+              sx={{
+                animation: `gi-fade-in 0.42s ${SOFT_EASING} both`,
+                willChange: "opacity, transform",
+              }}
+            >
+              <RouteErrorBoundary>
+                <Outlet />
+              </RouteErrorBoundary>
+            </Box>
           </Box>
       </Box>
     </Box>

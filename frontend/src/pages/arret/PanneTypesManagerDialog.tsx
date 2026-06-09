@@ -180,7 +180,9 @@ export function PanneTypesManagerDialog({
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             <Typography variant="body2" color="text.secondary">
-              Ajoutez, modifiez ou supprimez un type. La suppression retire la ligne immédiatement.
+              {equipe === "CCB"
+                ? "Phase de démarrage CCB : créez ici tous les types d'arrêt. Ils sont enregistrés en base et proposés dans le formulaire « Ajouter un arrêt »."
+                : "Ajoutez, modifiez ou supprimez un type. La suppression retire la ligne immédiatement."}
             </Typography>
             {infoMsg && (
               <Alert severity="success" onClose={() => setInfoMsg(null)}>

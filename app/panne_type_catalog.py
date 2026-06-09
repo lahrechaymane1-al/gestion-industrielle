@@ -59,18 +59,9 @@ BERCEAU_PANNE_TYPES = [
     "Remplissage des réservoirs de lubrification",
 ]
 
-# Types CCB — hors référentiel Berceau (pas de doublon avec BERCEAU_PANNE_TYPES)
-CCB_PANNE_TYPES = [
-    "Arrêt programme",
-    "Problème qualité pièce",
-    "Réglage / mise au point",
-    "Maintenance corrective",
-    "Manque composant",
-    "Attente outillage",
-    "Nettoyage ligne",
-    "Perte énergie / air",
-    "Autre",
-]
+# Types CCB — liste vide par défaut : les équipes les créent dans l'app (Arrêt CCB).
+# Optionnel : alimenter pour `seed_ccb_panne_types` ou jeux de démo uniquement.
+CCB_PANNE_TYPES: list[str] = []
 
 BERCEAU_PANNE_TYPE_NAMES = frozenset(BERCEAU_PANNE_TYPES)
 CCB_PANNE_TYPE_NAMES = frozenset(CCB_PANNE_TYPES)

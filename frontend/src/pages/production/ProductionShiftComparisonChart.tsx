@@ -51,16 +51,24 @@ function formatChartDate(iso: string): string {
   }
 }
 
-function resolveLineMode(line: string | undefined, equipe: EquipeScope): "A1" | "A3" | "ALL" | null {
-  if (equipe !== "Berceau") return null;
+type BerceauLineMode = "A1" | "A3" | "ALL";
+type CcbLineMode = "LHD" | "RHD" | "ALL";
+
+function resolveBerceauLineMode(line: string | undefined): BerceauLineMode {
   const raw = (line ?? "").trim();
   if (raw === "A1" || raw === "A3") return raw;
   return "ALL";
 }
 
+function resolveCcbLineMode(line: string | undefined): CcbLineMode {
+  const raw = (line ?? "").trim();
+  if (raw === "LHD" || raw === "RHD") return raw;
+  return "ALL";
+}
+
 async function fetchStockJournal(
   equipe: EquipeScope,
-  line: "A1" | "A3" | null,
+  line: "A1" | "A3" | "LHD" | "RHD" | null,
   date: string,
   days: number
 ): Promise<StockJournalResponse> {
@@ -75,23 +83,34 @@ export default function ProductionShiftComparisonChart({
   line,
 }: ProductionShiftComparisonChartProps) {
   const chart = useChartTheme();
-  const lineMode = resolveLineMode(line, equipe);
+  const berceauLineMode = equipe === "Berceau" ? resolveBerceauLineMode(line) : null;
+  const ccbLineMode = equipe === "CCB" ? resolveCcbLineMode(line) : null;
 
   const stockQuery = useQuery({
-    queryKey: ["stock-journal-shift-chart", equipe, lineMode ?? "CCB", date],
+    queryKey: ["stock-journal-shift-chart", equipe, berceauLineMode, ccbLineMode, date],
     enabled: Boolean(date),
     queryFn: async () => {
-      if (equipe !== "Berceau" || lineMode === null) {
-        return fetchStockJournal(equipe, null, date, CHART_HISTORY_DAYS);
+      if (equipe === "Berceau" && berceauLineMode) {
+        if (berceauLineMode === "A1" || berceauLineMode === "A3") {
+          return fetchStockJournal(equipe, berceauLineMode, date, CHART_HISTORY_DAYS);
+        }
+        const [a1, a3] = await Promise.all([
+          fetchStockJournal(equipe, "A1", date, CHART_HISTORY_DAYS),
+          fetchStockJournal(equipe, "A3", date, CHART_HISTORY_DAYS),
+        ]);
+        return mergeStockJournalResponses(a1, a3, date);
       }
-      if (lineMode === "A1" || lineMode === "A3") {
-        return fetchStockJournal(equipe, lineMode, date, CHART_HISTORY_DAYS);
+      if (equipe === "CCB" && ccbLineMode) {
+        if (ccbLineMode === "LHD" || ccbLineMode === "RHD") {
+          return fetchStockJournal(equipe, ccbLineMode, date, CHART_HISTORY_DAYS);
+        }
+        const [lhd, rhd] = await Promise.all([
+          fetchStockJournal(equipe, "LHD", date, CHART_HISTORY_DAYS),
+          fetchStockJournal(equipe, "RHD", date, CHART_HISTORY_DAYS),
+        ]);
+        return mergeStockJournalResponses(lhd, rhd, date);
       }
-      const [a1, a3] = await Promise.all([
-        fetchStockJournal(equipe, "A1", date, CHART_HISTORY_DAYS),
-        fetchStockJournal(equipe, "A3", date, CHART_HISTORY_DAYS),
-      ]);
-      return mergeStockJournalResponses(a1, a3, date);
+      return fetchStockJournal(equipe, null, date, CHART_HISTORY_DAYS);
     },
   });
 
@@ -106,11 +125,15 @@ export default function ProductionShiftComparisonChart({
   }, [stockQuery.data?.history]);
 
   const diversiteLabel =
-    equipe !== "Berceau"
-      ? "—"
-      : lineMode === "ALL"
+    equipe === "Berceau"
+      ? berceauLineMode === "ALL"
         ? "A1 + A3 (toutes)"
-        : lineMode ?? "—";
+        : (berceauLineMode ?? "—")
+      : equipe === "CCB"
+        ? ccbLineMode === "ALL"
+          ? "LHD + RHD (toutes)"
+          : (ccbLineMode ?? "—")
+        : "—";
 
   const shiftColor = {
     A: chart.colors.primary,

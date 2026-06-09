@@ -1,6 +1,7 @@
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import {
   Box,
@@ -10,6 +11,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
   MenuItem,
   Paper,
@@ -27,7 +29,7 @@ import {
 import { alpha } from "@mui/material/styles";
 import { Link as RouterLink } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { useLockedShift, useMe } from "../../auth/AuthContext";
 import { GiDatePicker, GiDatePickerRhf } from "../../components/GiDatePicker";
@@ -43,6 +45,20 @@ import {
   isoCalendarToday,
   nroPercentFromRo,
 } from "./productionMetrics";
+import {
+  BERCEAU_PRODUCTION_SETTINGS_QUERY_KEY,
+  berceauLineCodeForHour,
+  berceauObjectifKey,
+  buildHourlyObjectifsFromReferential,
+  factoryBerceauProductionSettings,
+  fetchBerceauProductionSettings,
+  objectifForHourFromSettings,
+  saveBerceauProductionSettings,
+  sumBerceauObjectifsA1,
+  sumBerceauObjectifsA3,
+  type BerceauHourKey,
+  type BerceauProductionSettings,
+} from "./berceauProductionSettings";
 
 function berceauHourRoPercent(production: number, objectif: number): number | null {
   if (objectif <= 0) return null;
@@ -251,15 +267,6 @@ async function fetchAllBerceauProductionRows(
   return out;
 }
 
-const DEFAULT_OBJECTIFS: Record<"A1" | "A3", Record<HourIndex, number>> = {
-  A1: { 1: 40, 2: 45, 3: 45, 4: 45, 5: 25, 6: 45, 7: 45, 8: 45 },
-  A3: { 1: 30, 2: 33, 3: 33, 4: 33, 5: 20, 6: 33, 7: 33, 8: 33 },
-};
-
-function defaultObjectifForHour(line: "A1" | "A3", hour: HourIndex) {
-  return DEFAULT_OBJECTIFS[line]?.[hour] ?? 0;
-}
-
 const defaultForm = () => ({
   line: "A1",
   date: isoCalendarToday(),
@@ -273,14 +280,14 @@ const defaultForm = () => ({
   objectif_h6: 0,
   objectif_h7: 0,
   objectif_h8: 0,
-  line_h1: "",
-  line_h2: "",
-  line_h3: "",
-  line_h4: "",
-  line_h5: "",
-  line_h6: "",
-  line_h7: "",
-  line_h8: "",
+  line_h1: "A1",
+  line_h2: "A1",
+  line_h3: "A1",
+  line_h4: "A1",
+  line_h5: "A1",
+  line_h6: "A1",
+  line_h7: "A1",
+  line_h8: "A1",
   production_h1: 0,
   production_h2: 0,
   production_h3: 0,
@@ -410,6 +417,7 @@ export default function BerceauProductionPage() {
   const me = useMe();
   const lockedShift = useLockedShift();
   const canDelete = me?.permissions?.delete === true;
+  const canUpdate = me?.permissions?.update === true;
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(15);
   const [open, setOpen] = useState(false);
@@ -420,6 +428,35 @@ export default function BerceauProductionPage() {
   const [shiftFocus, setShiftFocus] = useState<ShiftView>(lockedShift ? (lockedShift as ShiftCode) : "ALL");
   const [completionFilter, setCompletionFilter] = useState<"all" | "incomplete">("all");
   const [dateFilter, setDateFilter] = useState<string>(() => isoCalendarToday());
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsDraft, setSettingsDraft] = useState<BerceauProductionSettings>(() => factoryBerceauProductionSettings());
+
+  const { data: globalReferential = factoryBerceauProductionSettings() } = useQuery({
+    queryKey: BERCEAU_PRODUCTION_SETTINGS_QUERY_KEY,
+    queryFn: () => fetchBerceauProductionSettings(),
+    staleTime: 0,
+  });
+
+  const settingsSaveMutation = useMutation({
+    mutationFn: saveBerceauProductionSettings,
+    onSuccess: async (saved) => {
+      setSettingsDraft(saved);
+      await qc.invalidateQueries({ queryKey: BERCEAU_PRODUCTION_SETTINGS_QUERY_KEY });
+      await qc.invalidateQueries({ queryKey: ["dashboard-pareto-types-percent"] });
+      await qc.invalidateQueries({ queryKey: ["alertes-pannes-graph"] });
+      if (open && !editing) {
+        const entryDate = String(form.getValues("date") ?? "");
+        const settings =
+          entryDate && entryDate < isoCalendarToday()
+            ? await fetchBerceauProductionSettings(entryDate)
+            : saved;
+        applyReferentialObjectifs(settings);
+      }
+      setSettingsOpen(false);
+      setErrorMsg(null);
+    },
+    onError: (e) => setErrorMsg(formatApiError(e)),
+  });
 
   useEffect(() => {
     if (lockedShift) setShiftFocus(lockedShift as ShiftCode);
@@ -475,29 +512,85 @@ export default function BerceauProductionPage() {
   const isLoading = tableFetchAll ? tableAllLoading : tablePageLoading;
 
   const form = useForm({ defaultValues: defaultForm() });
+  const dialogDate = form.watch("date");
+  const isHistoricalEntryDate = !!dialogDate && dialogDate < isoCalendarToday();
 
-  // Auto-fill hourly objectif based on the hour's diversité (A1/A3), but don't overwrite manual edits.
+  const { data: historicalReferential } = useQuery({
+    queryKey: [...BERCEAU_PRODUCTION_SETTINGS_QUERY_KEY, "entry", dialogDate],
+    queryFn: () => fetchBerceauProductionSettings(dialogDate),
+    enabled: open && !!dialogDate && isHistoricalEntryDate,
+    staleTime: 0,
+  });
+  /** Objectifs en vigueur pour la date de la fiche (singleton aujourd’hui, version historique sinon). */
+  const referentialForDialog = isHistoricalEntryDate
+    ? (historicalReferential ?? globalReferential)
+    : globalReferential;
+
+  const recomputeObjectifTotal = () => {
+    const sum = HOURS.reduce(
+      (s, hh) => s + Number(form.getValues(`objectif_h${hh}` as const) || 0),
+      0
+    );
+    form.setValue("objectif", sum, { shouldDirty: true });
+  };
+
+  const syncObjectifForHour = (hour: BerceauHourKey, lineRaw: string) => {
+    if (lineRaw !== "A1" && lineRaw !== "A3") {
+      form.setValue(`objectif_h${hour}` as const, 0, { shouldDirty: true });
+    } else {
+      const line = berceauLineCodeForHour(lineRaw);
+      const next = objectifForHourFromSettings(referentialForDialog, line, hour);
+      form.setValue(`objectif_h${hour}` as const, next, { shouldDirty: true });
+    }
+    recomputeObjectifTotal();
+  };
+
+  const applyReferentialObjectifs = (settings: BerceauProductionSettings, lineHours?: readonly string[]) => {
+    const lines =
+      lineHours ??
+      HOURS.map((h) => berceauLineCodeForHour(String(form.getValues(`line_h${h}` as const) ?? "")));
+    const built = buildHourlyObjectifsFromReferential(settings, lines);
+    HOURS.forEach((h) => {
+      form.setValue(`objectif_h${h}` as const, built[`objectif_h${h}`], { shouldDirty: false });
+    });
+    form.setValue("objectif", built.objectif, { shouldDirty: false });
+  };
+
+  // Objectifs liés à la diversité horaire (fiche Objectifs & temps de cycle).
   const lineByHour = HOURS.map((h) => form.watch(`line_h${h}` as const));
+  const prevLineByHourRef = useRef<(string | undefined)[]>([]);
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      prevLineByHourRef.current = [];
+      return;
+    }
     const dirty: any = (form.formState as any)?.dirtyFields ?? {};
     let sum = 0;
+    let anyLineChanged = false;
     HOURS.forEach((h, idx) => {
       const raw = lineByHour[idx];
+      const line = berceauLineCodeForHour(raw);
       const objectifKey = `objectif_h${h}`;
+      const prevRaw = prevLineByHourRef.current[idx];
+      const lineChanged =
+        prevLineByHourRef.current.length > 0 &&
+        berceauLineCodeForHour(prevRaw) !== line &&
+        (raw === "A1" || raw === "A3" || prevRaw === "A1" || prevRaw === "A3");
+      if (lineChanged) anyLineChanged = true;
       const isDirty = !!dirty?.[objectifKey];
-      if (raw !== "A1" && raw !== "A3") {
-        if (!isDirty) form.setValue(objectifKey as any, 0);
-        return;
+      const shouldUpdate = editing ? lineChanged : !isDirty;
+      if (shouldUpdate && (raw === "A1" || raw === "A3")) {
+        const next = objectifForHourFromSettings(referentialForDialog, line, h);
+        form.setValue(objectifKey as any, next, { shouldDirty: lineChanged });
       }
-      const line = raw as "A1" | "A3";
-      const next = defaultObjectifForHour(line, h);
-      if (!isDirty) form.setValue(objectifKey as any, next);
       const cur = Number(form.getValues(objectifKey as any) || 0);
       sum += cur;
     });
-    if (!dirty?.objectif) form.setValue("objectif" as any, sum);
-  }, [open, form, lineByHour]);
+    if ((!editing && !dirty?.objectif) || anyLineChanged) {
+      form.setValue("objectif" as any, sum, { shouldDirty: anyLineChanged });
+    }
+    prevLineByHourRef.current = [...lineByHour];
+  }, [open, editing, form, lineByHour, referentialForDialog]);
 
   const buildPayload = (values: Record<string, unknown>) => {
     const rec = normalizeLineHours(values);
@@ -565,7 +658,6 @@ export default function BerceauProductionPage() {
     },
   });
 
-  const dialogDate = form.watch("date");
   const dialogShift = (lockedShift as ShiftCode | undefined) ?? (form.watch("shift") as ShiftCode);
 
   const arretsHourQuery = useQuery({
@@ -618,10 +710,25 @@ export default function BerceauProductionPage() {
     });
   }, [open, arretsHourQuery.data, form, editing]);
 
-  const openEdit = (row: ProductionBerceauRow) => {
+  const loadReferentialForDate = async (isoDate: string): Promise<BerceauProductionSettings> => {
+    if (isoDate < isoCalendarToday()) {
+      return fetchBerceauProductionSettings(isoDate);
+    }
+    return qc.fetchQuery({
+      queryKey: BERCEAU_PRODUCTION_SETTINGS_QUERY_KEY,
+      queryFn: () => fetchBerceauProductionSettings(),
+    });
+  };
+
+  const openEdit = (row: ProductionBerceauRow, options?: { refreshObjectifsFromReferential?: boolean }) => {
     setEditing(row);
     setShiftFocus(row.shift as ShiftCode);
     form.reset(berceauRowToFormValues(row));
+    if (options?.refreshObjectifsFromReferential) {
+      const rowDate = row.date.slice(0, 10);
+      const lines = HOURS.map((h) => String(row[`line_h${h}` as const] ?? "A1"));
+      void loadReferentialForDate(rowDate).then((settings) => applyReferentialObjectifs(settings, lines));
+    }
     setOpen(true);
   };
 
@@ -655,10 +762,9 @@ export default function BerceauProductionPage() {
   const exportExcelHref = useMemo(() => {
     const p = new URLSearchParams({ format: "excel" });
     if (lineFilter === "A1" || lineFilter === "A3") p.set("line", lineFilter);
-    if (dateFilter) p.set("date", dateFilter);
     if (tableShiftParam) p.set("shift", tableShiftParam);
     return `/berceau/production/export/?${p.toString()}`;
-  }, [lineFilter, dateFilter, tableShiftParam]);
+  }, [lineFilter, tableShiftParam]);
 
   const shiftSummaries = useMemo(
     () =>
@@ -736,7 +842,9 @@ export default function BerceauProductionPage() {
       const existing =
         same.find((r) => berceauRowHasZeroProductionHour(r)) ?? same[0];
       if (existing) {
-        openEdit(existing);
+        // Aujourd’hui et futur : objectifs issus de la fiche référentiel, pas ceux copiés en base.
+        const refreshObjectifs = date >= isoCalendarToday();
+        openEdit(existing, { refreshObjectifsFromReferential: refreshObjectifs });
         return;
       }
     } catch {
@@ -749,7 +857,16 @@ export default function BerceauProductionPage() {
       shift,
     });
     setOpen(true);
+    void loadReferentialForDate(date).then((settings) => applyReferentialObjectifs(settings));
   };
+
+  const openReferentialDialog = () => {
+    setSettingsDraft({ ...globalReferential });
+    setSettingsOpen(true);
+  };
+
+  const settingsDraftTotalA1 = sumBerceauObjectifsA1(settingsDraft);
+  const settingsDraftTotalA3 = sumBerceauObjectifsA3(settingsDraft);
 
   return (
     <Stack spacing={2}>
@@ -791,6 +908,9 @@ export default function BerceauProductionPage() {
           </Button>
           <Button component={RouterLink} to="/berceau/dashboard" variant="outlined" size="small">
             Ouvrir Dashboard
+          </Button>
+          <Button variant="outlined" size="small" startIcon={<TuneOutlinedIcon />} onClick={openReferentialDialog}>
+            Objectifs & temps de cycle
           </Button>
           <TextField
             select
@@ -1092,7 +1212,11 @@ export default function BerceauProductionPage() {
                         label="Diversite"
                         id={`prod-berceau-hour-${h}-diversite`}
                         value={field.value === "A1" || field.value === "A3" ? field.value : ""}
-                        onChange={(e) => field.onChange(e.target.value)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          field.onChange(v);
+                          syncObjectifForHour(h, v);
+                        }}
                         SelectProps={{
                           displayEmpty: true,
                           renderValue: (v) =>
@@ -1158,6 +1282,100 @@ export default function BerceauProductionPage() {
           <Button variant="contained" onClick={onSubmit} disabled={saveMutation.isPending}>
             Enregistrer brouillon
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={settingsOpen} onClose={() => setSettingsOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>Objectifs & temps de cycle</DialogTitle>
+        <DialogContent>
+          <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
+            Objectifs horaires · diversité A1
+          </Typography>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(4, 1fr)" }, gap: 1.5, mb: 2 }}>
+            {HOURS.map((h) => (
+              <TextField
+                key={`a1-h${h}`}
+                size="small"
+                type="number"
+                label={`Objectif H${h}`}
+                inputProps={{ min: 0 }}
+                value={settingsDraft[berceauObjectifKey("A1", h)] ?? 0}
+                onChange={(e) => {
+                  const val = Math.max(0, Number(e.target.value) || 0);
+                  setSettingsDraft((prev) => ({ ...prev, [berceauObjectifKey("A1", h)]: val }));
+                }}
+              />
+            ))}
+          </Box>
+          <Typography variant="body2" sx={{ mb: 2, fontWeight: 600 }}>
+            Total shift A1 : {settingsDraftTotalA1}
+          </Typography>
+
+          <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
+            Objectifs horaires · diversité A3
+          </Typography>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(4, 1fr)" }, gap: 1.5, mb: 2 }}>
+            {HOURS.map((h) => (
+              <TextField
+                key={`a3-h${h}`}
+                size="small"
+                type="number"
+                label={`Objectif H${h}`}
+                inputProps={{ min: 0 }}
+                value={settingsDraft[berceauObjectifKey("A3", h)] ?? 0}
+                onChange={(e) => {
+                  const val = Math.max(0, Number(e.target.value) || 0);
+                  setSettingsDraft((prev) => ({ ...prev, [berceauObjectifKey("A3", h)]: val }));
+                }}
+              />
+            ))}
+          </Box>
+          <Typography variant="body2" sx={{ mb: 2, fontWeight: 600 }}>
+            Total shift A3 : {settingsDraftTotalA3}
+          </Typography>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
+            Temps de cycle
+          </Typography>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+            <TextField
+              size="small"
+              type="number"
+              label="Temps de cycle A1 (min)"
+              inputProps={{ min: 0.01, step: 0.1 }}
+              value={settingsDraft.divisor_a1}
+              onChange={(e) =>
+                setSettingsDraft((prev) => ({ ...prev, divisor_a1: Math.max(0.01, Number(e.target.value) || 0) }))
+              }
+              sx={{ minWidth: 140 }}
+            />
+            <TextField
+              size="small"
+              type="number"
+              label="Temps de cycle A3 (min)"
+              inputProps={{ min: 0.01, step: 0.1 }}
+              value={settingsDraft.divisor_a3}
+              onChange={(e) =>
+                setSettingsDraft((prev) => ({ ...prev, divisor_a3: Math.max(0.01, Number(e.target.value) || 0) }))
+              }
+              sx={{ minWidth: 140 }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setSettingsDraft(factoryBerceauProductionSettings())}>Réinitialiser usine</Button>
+          <Button onClick={() => setSettingsOpen(false)}>Annuler</Button>
+          {canUpdate ? (
+            <Button
+              variant="contained"
+              disabled={settingsSaveMutation.isPending}
+              onClick={() => settingsSaveMutation.mutate(settingsDraft)}
+            >
+              Enregistrer
+            </Button>
+          ) : null}
         </DialogActions>
       </Dialog>
 

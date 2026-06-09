@@ -127,4 +127,4 @@ class OperateurEffectif(models.Model):
             raise ValidationError(
                 {"num_tel": "Le numero de telephone doit contenir 8 a 15 chiffres (option + au debut)."}
             )
-
+        

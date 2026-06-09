@@ -10,9 +10,12 @@ from django.utils.crypto import get_random_string
 
 from .models import Absence, ModeDegrade, OperateurEffectif, ProductionBerceau, UserAccessProfile
 from stock.models import StockJournal
+from production.models import BerceauImpactSettings, BerceauObjectifSettings
+
 from .downtime_impact import (
     berceau_alerte_impact_pct,
     downtime_impact_percent,
+    get_berceau_divisors_for_date,
     hourly_objective_for_diversity,
     parse_diversite_from_cause,
     resolve_diversity_for_impact,
@@ -152,9 +155,32 @@ class EffectifApiTests(TestCase):
     def test_effectif_api_crud_and_uniqueness(self):
         import json
 
+        psp_row = OperateurEffectif.objects.create(
+            nom_complet="PSP CRUD",
+            shift="A",
+            cin="PSP-CRUD-1",
+            type_contrat="CDI",
+            date_naissance="1990-01-01",
+            date_entree="2010-01-01",
+            identifiant="PSP-CRUD-1",
+            num_tel="+212611111111",
+            sexe="Homme",
+            fonction="PSP",
+            ville_actuelle="Fes",
+            niveau_etude="Bac",
+            numero_casier="B1",
+            parada_transport="Parada A",
+            pointure_chaussure=42,
+            specialite="Pilotage",
+            taille_pantalon="M",
+            taille_veste="L",
+            ville_origine="Meknes",
+            equipe="Berceau",
+        )
+        create_payload = {**self._payload(), "psp_lead": psp_row.id}
         create_response = self.client.post(
             reverse("api_effectifs"),
-            data=json.dumps(self._payload()),
+            data=json.dumps(create_payload),
             content_type="application/json",
         )
         self.assertEqual(create_response.status_code, 201)
@@ -170,12 +196,12 @@ class EffectifApiTests(TestCase):
 
         duplicate_response = self.client.post(
             reverse("api_effectifs"),
-            data=json.dumps(self._payload()),
+            data=json.dumps(create_payload),
             content_type="application/json",
         )
         self.assertEqual(duplicate_response.status_code, 400)
 
-        patch_payload = self._payload()
+        patch_payload = {**create_payload}
         patch_payload["nom_complet"] = "API User Updated"
         patch_payload["cin"] = "EF123457"
         patch_payload["identifiant"] = "EMP-3002"
@@ -390,6 +416,33 @@ class EffectifApiTests(TestCase):
 
         detail = self.client.get(reverse("api_effectif_detail", kwargs={"pk": psp_effectif.id}))
         self.assertEqual(detail.json().get("psp_linked_username"), "psp_account_z")
+
+    def test_admin_can_create_psp_login_on_post(self):
+        import json
+
+        User = get_user_model()
+        payload = self._payload()
+        payload.update(
+            {
+                "nom_complet": "PSP NEW LOGIN",
+                "cin": "PSP-LOGIN-NEW",
+                "identifiant": "psp_login_new",
+                "fonction": "PSP",
+                "psp_linked_username": "psp_login_new",
+                "psp_login_password": "NewPspPass8!",
+            }
+        )
+        res = self.client.post(
+            reverse("api_effectifs"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 201, res.content)
+        psp_row = OperateurEffectif.objects.get(cin="PSP-LOGIN-NEW")
+        user = User.objects.get(username="psp_login_new")
+        prof = UserAccessProfile.objects.get(user=user)
+        self.assertEqual(prof.role, UserAccessProfile.Role.PSP)
+        self.assertEqual(prof.effectif_id, psp_row.id)
 
     def test_psp_shift_update_does_not_move_unlinked_same_shift_operators(self):
         """Operateur meme shift sans psp_lead ne suit pas le changement de shift du PSP."""
@@ -698,6 +751,62 @@ class EffectifApiTests(TestCase):
         self.assertEqual(created.psp_lead_id, psp_row.id)
         self.assertEqual(created.shift, "A")
 
+    def test_psp_clears_psp_lead_on_save(self):
+        import json
+
+        psp_row = OperateurEffectif.objects.create(
+            nom_complet="PSP Lead Target",
+            shift="A",
+            cin="PSP-CLR-1",
+            type_contrat="CDI",
+            date_naissance="1990-01-01",
+            date_entree="2010-01-01",
+            identifiant="PSP-CLR-1",
+            num_tel="+212611111112",
+            sexe="Homme",
+            fonction="PSP",
+            ville_actuelle="Fes",
+            niveau_etude="Bac",
+            numero_casier="B2",
+            parada_transport="P1",
+            pointure_chaussure=42,
+            specialite="Pilotage",
+            taille_pantalon="M",
+            taille_veste="L",
+            ville_origine="Fes",
+            equipe="Berceau",
+        )
+        payload = self._payload()
+        payload.update(
+            {
+                "cin": "PSP-NEW-1",
+                "identifiant": "PSP-NEW-1",
+                "fonction": "PSP",
+                "psp_lead": psp_row.id,
+            }
+        )
+        res = self.client.post(
+            reverse("api_effectifs"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 201)
+        created = OperateurEffectif.objects.get(cin="PSP-NEW-1")
+        self.assertIsNone(created.psp_lead_id)
+
+    def test_operateur_requires_psp_lead_for_admin(self):
+        import json
+
+        payload = self._payload()
+        payload.update({"cin": "OP-NO-LEAD", "identifiant": "OP-NO-LEAD"})
+        res = self.client.post(
+            reverse("api_effectifs"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("psp_lead", res.json().get("errors", {}))
+
     def test_psp_effectif_list_resolves_lead_via_username_without_profile_fk(self):
         """GET effectifs uses get_psp_effectif_id (username = identifiant), not profile.effectif alone."""
         User = get_user_model()
@@ -762,6 +871,50 @@ class EffectifApiTests(TestCase):
     def test_effectif_shift_change_updates_absence_shift(self):
         import json
 
+        psp_a = OperateurEffectif.objects.create(
+            nom_complet="PSP Abs A",
+            shift="A",
+            cin="PSP-ABS-A",
+            type_contrat="CDI",
+            date_naissance="1990-01-01",
+            date_entree="2010-01-01",
+            identifiant="PSP-ABS-A",
+            num_tel="+212612300090",
+            sexe="Homme",
+            fonction="PSP",
+            ville_actuelle="Fes",
+            niveau_etude="Bac",
+            numero_casier="PA",
+            parada_transport="P1",
+            pointure_chaussure=42,
+            specialite="Pilotage",
+            taille_pantalon="M",
+            taille_veste="L",
+            ville_origine="Fes",
+            equipe="Berceau",
+        )
+        psp_b = OperateurEffectif.objects.create(
+            nom_complet="PSP Abs B",
+            shift="B",
+            cin="PSP-ABS-B",
+            type_contrat="CDI",
+            date_naissance="1990-01-01",
+            date_entree="2010-01-01",
+            identifiant="PSP-ABS-B",
+            num_tel="+212612300091",
+            sexe="Homme",
+            fonction="PSP",
+            ville_actuelle="Fes",
+            niveau_etude="Bac",
+            numero_casier="PB",
+            parada_transport="P1",
+            pointure_chaussure=42,
+            specialite="Pilotage",
+            taille_pantalon="M",
+            taille_veste="L",
+            ville_origine="Fes",
+            equipe="Berceau",
+        )
         op = OperateurEffectif.objects.create(
             nom_complet="Avec absence",
             shift="A",
@@ -772,7 +925,7 @@ class EffectifApiTests(TestCase):
             identifiant="OP-ABS-SHIFT-1",
             num_tel="+212612300099",
             sexe="Homme",
-            fonction="Operateur",
+            fonction="OPERATEUR",
             ville_actuelle="Fes",
             niveau_etude="Bac",
             numero_casier="C1",
@@ -783,6 +936,7 @@ class EffectifApiTests(TestCase):
             taille_veste="L",
             ville_origine="Fes",
             equipe="Berceau",
+            psp_lead=psp_a,
         )
         remp = OperateurEffectif.objects.create(
             nom_complet="Remplacant",
@@ -821,6 +975,7 @@ class EffectifApiTests(TestCase):
                 "nom_complet": "Avec absence",
                 "cin": "OP-ABS-SHIFT-1",
                 "identifiant": "OP-ABS-SHIFT-1",
+                "psp_lead": psp_b.id,
                 "shift": "B",
             }
         )
@@ -830,6 +985,8 @@ class EffectifApiTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(res.status_code, 200)
+        op.refresh_from_db()
+        self.assertEqual(op.shift, "B")
         ab.refresh_from_db()
         self.assertEqual(ab.shift, "B")
 
@@ -2522,3 +2679,52 @@ class DowntimeImpactTests(TestCase):
         # un shift : (13/1.3)*(100/100)=10 ; deux shifts objectif 200 → 5 %
         self.assertAlmostEqual(berceau_alerte_impact_pct(alerte, [prod_a]), 10.0, places=6)
         self.assertAlmostEqual(berceau_alerte_impact_pct(alerte, [prod_a, prod_b]), 5.0, places=6)
+
+    def test_versioned_objectifs_apply_from_effective_date_not_retroactively(self):
+        BerceauObjectifSettings.objects.create(
+            effective_from=date(2026, 6, 1),
+            objectif_a1_h1=80,
+            objectif_a1_h2=80,
+            objectif_a1_h3=80,
+            objectif_a1_h4=80,
+            objectif_a1_h5=40,
+            objectif_a1_h6=80,
+            objectif_a1_h7=80,
+            objectif_a1_h8=80,
+            objectif_a3_h1=60,
+            objectif_a3_h2=60,
+            objectif_a3_h3=60,
+            objectif_a3_h4=60,
+            objectif_a3_h5=40,
+            objectif_a3_h6=60,
+            objectif_a3_h7=60,
+            objectif_a3_h8=60,
+        )
+        before = BerceauObjectifSettings.get_for_date(date(2026, 5, 31))
+        after = BerceauObjectifSettings.get_for_date(date(2026, 6, 3))
+        self.assertEqual(before.objectif_a1_h1, 40)
+        self.assertEqual(after.objectif_a1_h1, 80)
+
+    def test_versioned_divisors_apply_from_effective_date_not_retroactively(self):
+        BerceauImpactSettings.objects.create(
+            effective_from=date(2026, 6, 1),
+            divisor_a1=2.6,
+            divisor_a3=3.6,
+        )
+        self.assertEqual(get_berceau_divisors_for_date(date(2026, 5, 31)), (1.3, 1.8))
+        self.assertEqual(get_berceau_divisors_for_date(date(2026, 6, 1)), (2.6, 3.6))
+        alerte_before = SimpleNamespace(
+            cause="[diversite:A1] x",
+            heure_production=1,
+            temps_arret_min=13,
+            date=date(2026, 5, 31),
+        )
+        alerte_after = SimpleNamespace(
+            cause="[diversite:A1] x",
+            heure_production=1,
+            temps_arret_min=13,
+            date=date(2026, 6, 3),
+        )
+        prod = SimpleNamespace(line_h1="A1", objectif_h1=100)
+        self.assertAlmostEqual(berceau_alerte_impact_pct(alerte_before, [prod]), 10.0, places=6)
+        self.assertAlmostEqual(berceau_alerte_impact_pct(alerte_after, [prod]), 5.0, places=6)

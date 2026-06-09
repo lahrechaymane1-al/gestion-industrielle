@@ -1704,26 +1704,53 @@ def _psp_login_username_map(effectif_ids: list[int]) -> dict[int, str]:
 
 
 def _apply_psp_login_link_from_payload(request, *, effectif_row: OperateurEffectif, payload: dict) -> str | None:
-    """RU/ADMIN : ``psp_linked_username`` lie le compte Django PSP à cette fiche (efface si chaîne vide)."""
+    """
+    RU/ADMIN : lie un compte Django PSP à la fiche effectif.
+
+    - ``psp_linked_username`` : identifiant de connexion (vide = délier).
+    - ``psp_login_password`` : crée le compte s'il n'existe pas, ou met à jour le mot de passe.
+    """
     if not is_admin_or_ru(request.user):
         return None
-    if "psp_linked_username" not in payload:
+
+    has_username_key = "psp_linked_username" in payload
+    password = (payload.get("psp_login_password") or "").strip()
+    if not has_username_key and not password:
         return None
+
     if (effectif_row.fonction or "").strip().upper() != "PSP":
         return "Le lien compte ne s'applique qu'aux fiches PSP."
 
-    username = (payload.get("psp_linked_username") or "").strip()
+    username = (payload.get("psp_linked_username") or "").strip() if has_username_key else ""
+    if not username and password:
+        username = (effectif_row.identifiant or "").strip()
+    if not username and not has_username_key:
+        return None
+
     User = get_user_model()
 
-    if not username:
+    if has_username_key and not username:
         UserAccessProfile.objects.filter(effectif_id=effectif_row.pk, role=UserAccessProfile.Role.PSP).update(
             effectif=None
         )
         return None
 
+    if not username:
+        return None
+
+    if password and len(password) < 8:
+        return "Mot de passe : 8 caractères minimum."
+
     user = User.objects.filter(username__iexact=username).first()
     if not user:
-        return "Compte Django introuvable (identifiant de connexion inexistant)."
+        if not password:
+            return (
+                "Compte de connexion introuvable. Saisissez un mot de passe pour créer le compte PSP."
+            )
+        user = User.objects.create_user(username=username, password=password)
+    elif password:
+        user.set_password(password)
+        user.save(update_fields=["password"])
 
     existing = UserAccessProfile.objects.filter(user=user).first()
     if existing and existing.role != UserAccessProfile.Role.PSP:
@@ -1840,15 +1867,23 @@ def api_effectifs(request):
                 obj = form.save(commit=False)
                 obj.equipe = equipe_val
                 obj.updated_by = request.user if request.user.is_authenticated else None
-                lead_id, lead_err = _resolve_psp_lead_id(payload.get("psp_lead"), equipe_val)
-                if lead_err:
-                    return JsonResponse({"errors": {"psp_lead": [lead_err]}}, status=400)
-                obj.psp_lead_id = lead_id
-                # If operator is assigned to a PSP lead, force operator shift to lead's shift.
-                if lead_id:
-                    lead = OperateurEffectif.objects.filter(pk=lead_id, is_deleted=False).only("shift").first()
-                    if lead and lead.shift in {"A", "B", "N"}:
-                        obj.shift = lead.shift
+                fn = (obj.fonction or "").strip().upper()
+                if fn == "PSP":
+                    obj.psp_lead_id = None
+                else:
+                    lead_id, lead_err = _resolve_psp_lead_id(payload.get("psp_lead"), equipe_val)
+                    if lead_err:
+                        return JsonResponse({"errors": {"psp_lead": [lead_err]}}, status=400)
+                    if not lead_id and not is_psp(request.user):
+                        return JsonResponse(
+                            {"errors": {"psp_lead": ["PSP responsable requis pour un operateur."]}},
+                            status=400,
+                        )
+                    obj.psp_lead_id = lead_id
+                    if lead_id:
+                        lead = OperateurEffectif.objects.filter(pk=lead_id, is_deleted=False).only("shift").first()
+                        if lead and lead.shift in {"A", "B", "N"}:
+                            obj.shift = lead.shift
                 obj.save()
                 link_err = _apply_psp_login_link_from_payload(request, effectif_row=obj, payload=payload)
                 if link_err:
@@ -2085,18 +2120,26 @@ def api_effectif_detail(request, pk):
                 obj = form.save(commit=False)
                 obj.equipe = equipe_val
                 obj.updated_by = request.user if request.user.is_authenticated else None
-                lead_id, lead_err = _resolve_psp_lead_id(
-                    payload.get("psp_lead", obj.psp_lead_id),
-                    equipe_val,
-                )
-                if lead_err:
-                    return JsonResponse({"errors": {"psp_lead": [lead_err]}}, status=400)
-                obj.psp_lead_id = lead_id
-                # If operator is assigned to a PSP lead, force operator shift to lead's shift.
-                if lead_id:
-                    lead = OperateurEffectif.objects.filter(pk=lead_id, is_deleted=False).only("shift").first()
-                    if lead and lead.shift in {"A", "B", "N"}:
-                        obj.shift = lead.shift
+                fn = (obj.fonction or "").strip().upper()
+                if fn == "PSP":
+                    obj.psp_lead_id = None
+                else:
+                    lead_id, lead_err = _resolve_psp_lead_id(
+                        payload.get("psp_lead", obj.psp_lead_id),
+                        equipe_val,
+                    )
+                    if lead_err:
+                        return JsonResponse({"errors": {"psp_lead": [lead_err]}}, status=400)
+                    if not lead_id and not is_psp(request.user):
+                        return JsonResponse(
+                            {"errors": {"psp_lead": ["PSP responsable requis pour un operateur."]}},
+                            status=400,
+                        )
+                    obj.psp_lead_id = lead_id
+                    if lead_id:
+                        lead = OperateurEffectif.objects.filter(pk=lead_id, is_deleted=False).only("shift").first()
+                        if lead and lead.shift in {"A", "B", "N"}:
+                            obj.shift = lead.shift
                 obj.save()
                 if original_shift != obj.shift:
                     Absence.objects.filter(effectif_id=obj.pk, is_deleted=False).update(shift=obj.shift)

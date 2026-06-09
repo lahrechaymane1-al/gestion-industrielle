@@ -1,6 +1,50 @@
-import type { ProductionBerceauRow } from "../../api/types";
+import type { ProductionBerceauRow, ProductionCCBRow } from "../../api/types";
 
 const BERCEAU_HOURS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+const CCB_HOURS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+
+export function ccbReadLhd(row: ProductionCCBRow, h: number): number {
+  const lhd = Number(row[`production_lhd_h${h}` as keyof ProductionCCBRow] ?? 0);
+  if (lhd > 0) return lhd;
+  const legacy = Number(row[`production_h${h}` as keyof ProductionCCBRow] ?? 0);
+  const rhd = Number(row[`production_rhd_h${h}` as keyof ProductionCCBRow] ?? 0);
+  return rhd > 0 ? 0 : legacy;
+}
+
+export function ccbReadRhd(row: ProductionCCBRow, h: number): number {
+  return Number(row[`production_rhd_h${h}` as keyof ProductionCCBRow] ?? 0);
+}
+
+export function ccbHourVolume(row: ProductionCCBRow, h: number): number {
+  return ccbReadLhd(row, h) + ccbReadRhd(row, h);
+}
+
+export function ccbEffectiveObjectif(row: ProductionCCBRow): number {
+  const hourly = CCB_HOURS.reduce((sum, h) => sum + Number(row[`objectif_h${h}`] ?? 0), 0);
+  return hourly > 0 ? hourly : Number(row.objectif || 0);
+}
+
+export function ccbEffectiveVolume(row: ProductionCCBRow): number {
+  const hourly = CCB_HOURS.reduce((sum, h) => sum + ccbHourVolume(row, h), 0);
+  return hourly > 0 ? hourly : Number(row.volume || 0);
+}
+
+export function ccbRoPercent(row: ProductionCCBRow): number {
+  const o = ccbEffectiveObjectif(row);
+  const v = ccbEffectiveVolume(row);
+  if (o <= 0) return 0;
+  return Math.round((v / o) * 10000) / 100;
+}
+
+export function ccbDiversityLabel(row: ProductionCCBRow): string {
+  const lines = new Set<string>();
+  for (const h of CCB_HOURS) {
+    if (ccbReadLhd(row, h) > 0) lines.add("LHD");
+    if (ccbReadRhd(row, h) > 0) lines.add("RHD");
+  }
+  if (lines.size) return [...lines].join(" / ");
+  return row.line ?? "—";
+}
 
 /** Jour calendaire local (YYYY-MM-DD) — évite le décalage minuit UTC de `toISOString()`. */
 export function isoCalendarToday(): string {

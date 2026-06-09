@@ -28,8 +28,8 @@ export function fmtQty(n: number): string {
   return Number(n).toLocaleString("fr-FR");
 }
 
-export function stockLineLabel(line: "A1" | "A3" | undefined): string {
-  if (line === "A1" || line === "A3") return `stock ${line}`;
+export function stockLineLabel(line: "A1" | "A3" | "LHD" | "RHD" | undefined): string {
+  if (line === "A1" || line === "A3" || line === "LHD" || line === "RHD") return `stock ${line}`;
   return "stock";
 }
 

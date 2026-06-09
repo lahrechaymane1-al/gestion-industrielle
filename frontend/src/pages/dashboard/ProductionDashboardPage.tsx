@@ -53,6 +53,7 @@ import type {
   ProductionBerceauRow,
 } from "../../api/types";
 import { useLockedShift } from "../../auth/AuthContext";
+import { designTokens } from "../../theme/designTokens";
 import {
   addRowToParetoMinuteBuckets,
   addRowToParetoPosteMinuteBuckets,
@@ -62,6 +63,11 @@ import {
   sumAllHourlyObjectifsAcrossRows,
   sumAllHourlyProduction,
 } from "../../domain/downtimeImpact";
+import {
+  BERCEAU_PRODUCTION_SETTINGS_QUERY_KEY,
+  fetchBerceauProductionSettings,
+  resolveBerceauCycleTimeForDate,
+} from "../production/berceauProductionSettings";
 import { formatTrendAxisDate, isoCalendarYesterday } from "../production/productionMetrics";
 import { exportParetoTypesExcel } from "../../utils/exportParetoTypesExcel";
 import { exportElementPng } from "./dashboardExport";
@@ -82,11 +88,11 @@ const CATEGORIE_OPTIONS: { value: "" | ArretCategoryFilter; label: string }[] = 
 
 const MAX_BARS_PER_CHART = 30;
 
-/** Seuil 80 % Pareto — trait et libellé blancs (dashboard). */
+/** Seuil 80 % Pareto — trait et libellé verts (dashboard impact arrêt). */
 const PARETO_SEUIL_80 = {
-  stroke: alpha("#fff", 0.9),
+  stroke: alpha(designTokens.accent.emerald, 0.95),
   strokeDasharray: "8 5",
-  labelFill: "#ffffff",
+  labelFill: designTokens.accent.emerald,
 } as const;
 
 /** Ligne renvoyée par le calcul Pareto types (cumul % inclus après agrégation requête). */
@@ -242,6 +248,12 @@ export default function ProductionDashboardPage() {
     [categorie]
   );
 
+  const { data: productionSettings } = useQuery({
+    queryKey: BERCEAU_PRODUCTION_SETTINGS_QUERY_KEY,
+    queryFn: () => fetchBerceauProductionSettings(),
+    staleTime: 60_000,
+  });
+
   const { data: paretoPostesList = [] } = useQuery({
     queryKey: ["berceau-postes-dashboard-pareto"],
     queryFn: async () =>
@@ -262,8 +274,9 @@ export default function ProductionDashboardPage() {
       effectiveShift || "__all__",
       categorie || "__all_cat__",
       paretoPosteId || "__all_postes__",
+      productionSettings?.impact_versions?.length ?? 0,
     ],
-    enabled: !!jour,
+    enabled: !!jour && !!productionSettings,
     staleTime: 0,
     queryFn: async () => {
       const dates = listIsoDates(jour, jour);
@@ -271,6 +284,7 @@ export default function ProductionDashboardPage() {
 
       const shiftFilter = (effectiveShift || "").trim() as ShiftCode | "";
       const categoryParam = categorie.trim() ? categorie.trim().toLowerCase() : "";
+      if (!productionSettings) return null;
 
       const prodRowsByDay = new Map<string, ProductionBerceauRow[]>();
       await Promise.all(
@@ -317,6 +331,7 @@ export default function ProductionDashboardPage() {
       for (const { day, rows } of alertesByDay) {
         const prodRowsDay = prodRowsByDay.get(day) ?? [];
         const objectifJour = sumAllHourlyObjectifsAcrossRows(prodRowsDay);
+        const divisors = resolveBerceauCycleTimeForDate(productionSettings, day);
         const buckets = new Map<string, number>();
         const posteBuckets = new Map<string, number>();
         const posteIdFilter = Number(paretoPosteId);
@@ -328,7 +343,7 @@ export default function ProductionDashboardPage() {
           }
           addRowToParetoPosteMinuteBuckets(posteBuckets, row, prodForImpact);
         }
-        const { byType: dayByType } = analyzeParetoMinuteBuckets(buckets, objectifJour);
+        const { byType: dayByType } = analyzeParetoMinuteBuckets(buckets, objectifJour, divisors);
         for (const [label, v] of dayByType) {
           if (!byType.has(label)) {
             byType.set(label, {
@@ -348,7 +363,7 @@ export default function ProductionDashboardPage() {
           entry.minutesA1 += v.minutesA1;
           entry.minutesA3 += v.minutesA3;
         }
-        const { byPoste: dayByPoste } = analyzeParetoPosteMinuteBuckets(posteBuckets, objectifJour);
+        const { byPoste: dayByPoste } = analyzeParetoPosteMinuteBuckets(posteBuckets, objectifJour, divisors);
         for (const [posteName, v] of dayByPoste) {
           if (!byPoste.has(posteName)) {
             byPoste.set(posteName, { poste: posteName, pctA1: 0, pctA3: 0, minutesA1: 0, minutesA3: 0 });

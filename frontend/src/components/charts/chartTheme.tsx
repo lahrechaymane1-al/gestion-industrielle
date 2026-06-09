@@ -471,7 +471,7 @@ export function StockEntreeSortieTooltip({
   label?: string;
   chart: ChartTheme;
   /** A1 or A3 — labels entree/sortie for that diversity stock */
-  stockLine?: "A1" | "A3";
+  stockLine?: "A1" | "A3" | "LHD" | "RHD";
 }) {
   if (!active || !payload?.length) return null;
   const point = payload[0]?.payload;

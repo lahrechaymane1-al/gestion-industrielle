@@ -1,6 +1,157 @@
+from datetime import date
+
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Sum
+
+# Temps de cycle par défaut (min) — aligné app.downtime_impact
+DEFAULT_DIVISOR_A1 = 1.3
+DEFAULT_DIVISOR_A3 = 1.8
+
+
+class BerceauImpactSettings(models.Model):
+    """Référentiel versionné : temps de cycle (diviseur impact) par date d'effet."""
+
+    effective_from = models.DateField(verbose_name="En vigueur à partir du")
+    divisor_a1 = models.FloatField(default=DEFAULT_DIVISOR_A1, validators=[MinValueValidator(0.01)])
+    divisor_a3 = models.FloatField(default=DEFAULT_DIVISOR_A3, validators=[MinValueValidator(0.01)])
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-effective_from", "-id"]
+        verbose_name = "Paramètres impact Berceau"
+        verbose_name_plural = "Paramètres impact Berceau"
+
+    def __str__(self):
+        return f"Berceau impact depuis {self.effective_from} (A1={self.divisor_a1}, A3={self.divisor_a3})"
+
+    @classmethod
+    def get_for_date(cls, target: date) -> "BerceauImpactSettings":
+        row = cls.objects.filter(effective_from__lte=target).order_by("-effective_from", "-id").first()
+        if row:
+            return row
+        return cls(
+            effective_from=date(2000, 1, 1),
+            divisor_a1=DEFAULT_DIVISOR_A1,
+            divisor_a3=DEFAULT_DIVISOR_A3,
+        )
+
+
+# Objectifs horaires par diversité (référentiel usine Berceau)
+BERCEAU_DEFAULT_OBJECTIFS_A1 = (40, 45, 45, 45, 25, 45, 45, 45)
+BERCEAU_DEFAULT_OBJECTIFS_A3 = (30, 33, 33, 33, 20, 33, 33, 33)
+
+BERCEAU_OBJECTIF_FIELD_NAMES = tuple(
+    [f"objectif_a1_h{h}" for h in range(1, 9)] + [f"objectif_a3_h{h}" for h in range(1, 9)]
+)
+
+
+def _berceau_default_objectif_fields() -> dict[str, int]:
+    fields: dict[str, int] = {}
+    for h, val in enumerate(BERCEAU_DEFAULT_OBJECTIFS_A1, start=1):
+        fields[f"objectif_a1_h{h}"] = val
+    for h, val in enumerate(BERCEAU_DEFAULT_OBJECTIFS_A3, start=1):
+        fields[f"objectif_a3_h{h}"] = val
+    return fields
+
+
+class BerceauObjectifSettings(models.Model):
+    """Référentiel versionné : objectifs horaires A1/A3 par date d'effet."""
+
+    effective_from = models.DateField(verbose_name="En vigueur à partir du")
+    objectif_a1_h1 = models.PositiveIntegerField(default=40, validators=[MinValueValidator(0)])
+    objectif_a1_h2 = models.PositiveIntegerField(default=45, validators=[MinValueValidator(0)])
+    objectif_a1_h3 = models.PositiveIntegerField(default=45, validators=[MinValueValidator(0)])
+    objectif_a1_h4 = models.PositiveIntegerField(default=45, validators=[MinValueValidator(0)])
+    objectif_a1_h5 = models.PositiveIntegerField(default=25, validators=[MinValueValidator(0)])
+    objectif_a1_h6 = models.PositiveIntegerField(default=45, validators=[MinValueValidator(0)])
+    objectif_a1_h7 = models.PositiveIntegerField(default=45, validators=[MinValueValidator(0)])
+    objectif_a1_h8 = models.PositiveIntegerField(default=45, validators=[MinValueValidator(0)])
+    objectif_a3_h1 = models.PositiveIntegerField(default=30, validators=[MinValueValidator(0)])
+    objectif_a3_h2 = models.PositiveIntegerField(default=33, validators=[MinValueValidator(0)])
+    objectif_a3_h3 = models.PositiveIntegerField(default=33, validators=[MinValueValidator(0)])
+    objectif_a3_h4 = models.PositiveIntegerField(default=33, validators=[MinValueValidator(0)])
+    objectif_a3_h5 = models.PositiveIntegerField(default=20, validators=[MinValueValidator(0)])
+    objectif_a3_h6 = models.PositiveIntegerField(default=33, validators=[MinValueValidator(0)])
+    objectif_a3_h7 = models.PositiveIntegerField(default=33, validators=[MinValueValidator(0)])
+    objectif_a3_h8 = models.PositiveIntegerField(default=33, validators=[MinValueValidator(0)])
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-effective_from", "-id"]
+        verbose_name = "Paramètres objectifs Berceau"
+        verbose_name_plural = "Paramètres objectifs Berceau"
+
+    def __str__(self):
+        return f"Berceau objectifs depuis {self.effective_from}"
+
+    def objectifs_for_line(self, line: str) -> tuple[int, ...]:
+        prefix = "objectif_a1" if line == "A1" else "objectif_a3"
+        return tuple(int(getattr(self, f"{prefix}_h{h}", 0) or 0) for h in range(1, 9))
+
+    def objectif_total_for_line(self, line: str) -> int:
+        return sum(self.objectifs_for_line(line))
+
+    @classmethod
+    def get_for_date(cls, target: date) -> "BerceauObjectifSettings":
+        row = cls.objects.filter(effective_from__lte=target).order_by("-effective_from", "-id").first()
+        if row:
+            return row
+        singleton = BerceauProductionSettings.get_singleton()
+        return cls(
+            effective_from=date(2000, 1, 1),
+            **{name: int(getattr(singleton, name, 0) or 0) for name in BERCEAU_OBJECTIF_FIELD_NAMES},
+        )
+
+
+class BerceauProductionSettings(models.Model):
+    """Objectifs horaires A1/A3 par défaut (singleton) + référence diviseurs impact."""
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    objectif_a1_h1 = models.PositiveIntegerField(default=40, validators=[MinValueValidator(0)])
+    objectif_a1_h2 = models.PositiveIntegerField(default=45, validators=[MinValueValidator(0)])
+    objectif_a1_h3 = models.PositiveIntegerField(default=45, validators=[MinValueValidator(0)])
+    objectif_a1_h4 = models.PositiveIntegerField(default=45, validators=[MinValueValidator(0)])
+    objectif_a1_h5 = models.PositiveIntegerField(default=25, validators=[MinValueValidator(0)])
+    objectif_a1_h6 = models.PositiveIntegerField(default=45, validators=[MinValueValidator(0)])
+    objectif_a1_h7 = models.PositiveIntegerField(default=45, validators=[MinValueValidator(0)])
+    objectif_a1_h8 = models.PositiveIntegerField(default=45, validators=[MinValueValidator(0)])
+    objectif_a3_h1 = models.PositiveIntegerField(default=30, validators=[MinValueValidator(0)])
+    objectif_a3_h2 = models.PositiveIntegerField(default=33, validators=[MinValueValidator(0)])
+    objectif_a3_h3 = models.PositiveIntegerField(default=33, validators=[MinValueValidator(0)])
+    objectif_a3_h4 = models.PositiveIntegerField(default=33, validators=[MinValueValidator(0)])
+    objectif_a3_h5 = models.PositiveIntegerField(default=20, validators=[MinValueValidator(0)])
+    objectif_a3_h6 = models.PositiveIntegerField(default=33, validators=[MinValueValidator(0)])
+    objectif_a3_h7 = models.PositiveIntegerField(default=33, validators=[MinValueValidator(0)])
+    objectif_a3_h8 = models.PositiveIntegerField(default=33, validators=[MinValueValidator(0)])
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Paramètres production Berceau"
+        verbose_name_plural = "Paramètres production Berceau"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def objectifs_for_line(self, line: str) -> tuple[int, ...]:
+        prefix = "objectif_a1" if line == "A1" else "objectif_a3"
+        return tuple(int(getattr(self, f"{prefix}_h{h}", 0) or 0) for h in range(1, 9))
+
+    def objectif_total_for_line(self, line: str) -> int:
+        return sum(self.objectifs_for_line(line))
+
+    @classmethod
+    def get_singleton(cls) -> "BerceauProductionSettings":
+        defaults: dict[str, int] = {}
+        for h, val in enumerate(BERCEAU_DEFAULT_OBJECTIFS_A1, start=1):
+            defaults[f"objectif_a1_h{h}"] = val
+        for h, val in enumerate(BERCEAU_DEFAULT_OBJECTIFS_A3, start=1):
+            defaults[f"objectif_a3_h{h}"] = val
+        obj, _ = cls.objects.get_or_create(pk=1, defaults=defaults)
+        return obj
 
 
 class ProductionBerceau(models.Model):

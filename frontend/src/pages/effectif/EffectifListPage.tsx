@@ -240,7 +240,36 @@ export default function EffectifListPage({ equipe }: { equipe: EquipeScope }) {
     }
   }, [editing, form, lockedShift, isPsp, me?.effectif_id]);
 
+  const { data: pspOptionsData } = useQuery({
+    queryKey: ["effectif-options-psp", equipe],
+    queryFn: async () =>
+      (
+        await api.get<{ results: EffectifOption[] }>("/api/effectifs/options/", {
+          params: { equipe, fonction: "PSP" },
+        })
+      ).data.results,
+  });
+  const pspOptions = pspOptionsData ?? [];
+
+  const fonctionValue = form.watch("fonction");
   const pspLeadValue = form.watch("psp_lead");
+  const isOperateurForm = fonctionValue === "OPERATEUR";
+  const showPspLeadField = !isPsp && isOperateurForm;
+  const selectedPspLead = pspOptions.find((o) => String(o.id) === String(pspLeadValue ?? ""));
+  const shiftLockedByPspLead = showPspLeadField && Boolean(pspLeadValue) && !lockedShift;
+
+  useEffect(() => {
+    if (!open) return;
+    if (fonctionValue === "PSP") {
+      form.setValue("psp_lead", "", { shouldDirty: true });
+      return;
+    }
+    if (!showPspLeadField || !pspLeadValue) return;
+    const lead = pspOptions.find((o) => String(o.id) === String(pspLeadValue));
+    if (lead?.shift && ["A", "B", "N"].includes(lead.shift)) {
+      form.setValue("shift", lead.shift as "A" | "B" | "N", { shouldDirty: true });
+    }
+  }, [open, fonctionValue, showPspLeadField, pspLeadValue, pspOptions, form]);
 
   const saveMutation = useMutation({
     mutationFn: async (payload: EffectifPayload) => {
@@ -255,6 +284,7 @@ export default function EffectifListPage({ equipe }: { equipe: EquipeScope }) {
       await qc.invalidateQueries({ queryKey: ["effectif-options"] });
       await qc.invalidateQueries({ queryKey: ["effectif-options-psp"] });
       await qc.invalidateQueries({ queryKey: ["absences"] });
+      await qc.invalidateQueries({ queryKey: ["auth-me"] });
       setOpen(false);
       setEditing(null);
       setErrorMsg(null);
@@ -275,24 +305,32 @@ export default function EffectifListPage({ equipe }: { equipe: EquipeScope }) {
   const exportHref = `/api/effectifs/?equipe=${encodeURIComponent(equipe)}&export=excel${
     effectiveShift ? `&shift=${encodeURIComponent(effectiveShift)}` : ""
   }${searchQuery.trim() ? `&q=${encodeURIComponent(searchQuery.trim())}` : ""}`;
-  const { data: pspOptionsData } = useQuery({
-    queryKey: ["effectif-options-psp", equipe],
-    queryFn: async () =>
-      (
-        await api.get<{ results: EffectifOption[] }>("/api/effectifs/options/", {
-          params: { equipe, fonction: "PSP" },
-        })
-      ).data.results,
-  });
-  const pspOptions = pspOptionsData ?? [];
 
   const onSubmit = form.handleSubmit((values) => {
-    const pspLeadId = isPsp && me?.effectif_id ? me.effectif_id : values.psp_lead ? Number(values.psp_lead) : null;
+    const fonction = isPsp && (!editing || editing.id !== me?.effectif_id) ? "OPERATEUR" : values.fonction;
+    let pspLeadId: number | null = null;
+    if (fonction === "PSP") {
+      pspLeadId = null;
+    } else if (isPsp && me?.effectif_id) {
+      pspLeadId = me.effectif_id;
+    } else if (values.psp_lead) {
+      pspLeadId = Number(values.psp_lead);
+    }
+    if (fonction === "OPERATEUR" && !pspLeadId) {
+      setErrorMsg("PSP lead requis pour un operateur.");
+      return;
+    }
+    const leadShift = pspLeadId ? pspOptions.find((o) => o.id === pspLeadId)?.shift : undefined;
+    const shift =
+      (lockedShift ??
+        (fonction === "OPERATEUR" && leadShift && ["A", "B", "N"].includes(leadShift)
+          ? leadShift
+          : values.shift)) as "A" | "B" | "N";
     const payload: EffectifPayload = {
       ...values,
       equipe,
-      shift: (lockedShift ?? values.shift) as "A" | "B" | "N",
-      fonction: isPsp && (!editing || editing.id !== me?.effectif_id) ? "OPERATEUR" : values.fonction,
+      shift,
+      fonction,
       psp_lead: pspLeadId,
     };
     saveMutation.mutate(payload);
@@ -522,18 +560,18 @@ export default function EffectifListPage({ equipe }: { equipe: EquipeScope }) {
             ) : (
               <TextField label="Fonction" fullWidth value="OPERATEUR" disabled helperText="Les PSP ne créent que des opérateurs de leur équipe." />
             )}
-            {!isPsp && (
+            {showPspLeadField && (
               <TextField
                 select
+                required
                 label="PSP lead"
                 fullWidth
-                helperText="Optionnel : PSP responsable pour les opérateurs de l’UEP."
+                helperText="Obligatoire : l’opérateur prend le shift de son PSP responsable."
                 value={pspLeadValue ?? ""}
                 onChange={(e) =>
                   form.setValue("psp_lead", e.target.value, { shouldDirty: true, shouldValidate: true })
                 }
               >
-                <MenuItem value="">Aucun</MenuItem>
                 {[...pspOptions]
                   .sort((a, b) => {
                     const s = a.shift.localeCompare(b.shift);
@@ -557,8 +595,16 @@ export default function EffectifListPage({ equipe }: { equipe: EquipeScope }) {
                   select
                   label="Shift"
                   fullWidth
-                  disabled={!!lockedShift}
-                  helperText={lockedShift ? "Shift impose (profil PSP)" : undefined}
+                  disabled={!!lockedShift || shiftLockedByPspLead}
+                  helperText={
+                    lockedShift
+                      ? "Shift impose (profil PSP)"
+                      : shiftLockedByPspLead && selectedPspLead
+                        ? `Hérite du PSP [${selectedPspLead.shift}] ${selectedPspLead.nom_complet}`
+                        : fonctionValue === "PSP"
+                          ? "Shift du PSP : ses opérateurs suivront ce shift."
+                          : undefined
+                  }
                   {...field}
                 >
                   {(lockedShift ? ([lockedShift] as const) : (["A", "B", "N"] as const)).map((s) => (

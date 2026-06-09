@@ -157,29 +157,38 @@ class Command(BaseCommand):
                 .values_list("pk", flat=True)
             )
 
-            qs_null = OperateurEffectif.objects.filter(
+            base_op_qs = OperateurEffectif.objects.filter(
                 equipe=psp.equipe,
                 shift=psp.shift,
                 is_deleted=False,
-                psp_lead_id__isnull=True,
             ).exclude(fonction="PSP")
+
+            qs_null = base_op_qs.filter(psp_lead_id__isnull=True)
             n_null = qs_null.update(psp_lead=primary)
 
             n_wrong = 0
             if sibling_psp_ids:
-                qs_wrong = OperateurEffectif.objects.filter(
-                    equipe=psp.equipe,
-                    shift=psp.shift,
-                    is_deleted=False,
-                    psp_lead_id__in=sibling_psp_ids,
-                ).exclude(fonction="PSP")
+                qs_wrong = base_op_qs.filter(psp_lead_id__in=sibling_psp_ids)
                 n_wrong = qs_wrong.update(psp_lead=primary)
 
-            n = n_null + n_wrong
+            deleted_lead_ids = list(
+                OperateurEffectif.objects.filter(is_deleted=True).values_list("pk", flat=True)
+            )
+            n_stale = 0
+            if deleted_lead_ids:
+                qs_stale = base_op_qs.filter(psp_lead_id__in=deleted_lead_ids)
+                n_stale = qs_stale.update(psp_lead=primary)
+
+            n = n_null + n_wrong + n_stale
             total += n
             if n:
+                extra = []
+                if n_wrong:
+                    extra.append(f"{n_wrong} depuis autre PSP doublon")
+                if n_stale:
+                    extra.append(f"{n_stale} depuis PSP supprime")
                 self.stdout.write(
                     f"Team {psp.equipe} shift {psp.shift}: {n} operateur(s) -> PSP {primary.identifiant}"
-                    + (f" ({n_wrong} depuis autre PSP doublon)" if n_wrong else "")
+                    + (f" ({', '.join(extra)})" if extra else "")
                 )
         return total

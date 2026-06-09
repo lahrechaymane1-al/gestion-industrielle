@@ -1,4 +1,6 @@
 """JSON API for Production Berceau / CCB (React SPA)."""
+from datetime import date as date_type
+
 from django.core.paginator import Paginator
 from django.db import DatabaseError
 from django.db.models import Q, Sum
@@ -20,6 +22,15 @@ from .api_utils import json_body, json_forbidden, parse_query_int
 from .ccb_constants import CCB_OBJECTIFS_HORAIRES
 from .forms import ProductionBerceauForm, ProductionCCBForm
 from .models import AlertePanne, ArretBerceau, ProductionBerceau, ProductionCCB
+from production.models import (
+    BERCEAU_OBJECTIF_FIELD_NAMES,
+    DEFAULT_DIVISOR_A1,
+    DEFAULT_DIVISOR_A3,
+    BerceauImpactSettings,
+    BerceauObjectifSettings,
+    BerceauProductionSettings,
+)
+from production_ccb.models import CcbProductionSettings, ccb_default_objectifs_horaires
 
 logger = __import__("logging").getLogger(__name__)
 
@@ -135,7 +146,16 @@ def _ccb_to_dict(obj: ProductionCCB) -> dict:
             "id",
             "date",
             "shift",
+            "line",
             "objectif",
+            "objectif_h1",
+            "objectif_h2",
+            "objectif_h3",
+            "objectif_h4",
+            "objectif_h5",
+            "objectif_h6",
+            "objectif_h7",
+            "objectif_h8",
             "production_h1",
             "production_h2",
             "production_h3",
@@ -144,6 +164,22 @@ def _ccb_to_dict(obj: ProductionCCB) -> dict:
             "production_h6",
             "production_h7",
             "production_h8",
+            "production_lhd_h1",
+            "production_lhd_h2",
+            "production_lhd_h3",
+            "production_lhd_h4",
+            "production_lhd_h5",
+            "production_lhd_h6",
+            "production_lhd_h7",
+            "production_lhd_h8",
+            "production_rhd_h1",
+            "production_rhd_h2",
+            "production_rhd_h3",
+            "production_rhd_h4",
+            "production_rhd_h5",
+            "production_rhd_h6",
+            "production_rhd_h7",
+            "production_rhd_h8",
             "rebut_h1",
             "rebut_h2",
             "rebut_h3",
@@ -160,8 +196,10 @@ def _ccb_to_dict(obj: ProductionCCB) -> dict:
     d["date"] = obj.date.isoformat() if obj.date else None
     d["ro_percent"] = obj.ro_percent
     d["temps_arrets"] = obj.compute_temps_arrets_from_alertes()
+    defaults = ccb_default_objectifs_horaires()
     for h in range(1, 9):
-        d[f"objectif_h{h}"] = int(CCB_OBJECTIFS_HORAIRES[h - 1])
+        stored = int(getattr(obj, f"objectif_h{h}", 0) or 0)
+        d[f"objectif_h{h}"] = stored if stored > 0 else int(defaults[h - 1])
     by_h = obj.temps_arrets_by_hour()
     for h in range(1, 9):
         d[f"temps_arrets_h{h}"] = by_h.get(h, 0)
@@ -305,6 +343,344 @@ def api_production_berceau_validate_hour(request, pk):
     obj.validate_hour(hour)
     obj.save(update_fields=["validated_hours_mask"])
     return JsonResponse({"ok": True, "validated_hours": obj.validated_hours, "validated_hours_mask": obj.validated_hours_mask})
+
+
+def _berceau_impact_settings_to_dict(obj: BerceauImpactSettings) -> dict:
+    return {
+        "id": obj.pk,
+        "effective_from": obj.effective_from.isoformat(),
+        "divisor_a1": float(obj.divisor_a1),
+        "divisor_a3": float(obj.divisor_a3),
+        "created_at": obj.created_at.isoformat() if obj.created_at else None,
+        "updated_at": obj.updated_at.isoformat() if obj.updated_at else None,
+    }
+
+
+def api_berceau_impact_settings(request):
+    """Référentiel versionné temps de cycle (diviseurs impact A1/A3)."""
+    if request.method == "GET":
+        if not auth_can_do_action(request.user, "read"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "Berceau":
+            return json_forbidden()
+        try:
+            versions = list(BerceauImpactSettings.objects.order_by("-effective_from", "-id"))
+        except DatabaseError:
+            logger.exception("api_berceau_impact_settings GET database error")
+            return JsonResponse(
+                {"error": "Erreur base de donnees. Executez: python manage.py migrate production."},
+                status=503,
+            )
+        date_param = (request.GET.get("date") or "").strip()
+        payload: dict = {
+            "versions": [_berceau_impact_settings_to_dict(v) for v in versions],
+        }
+        if date_param:
+            try:
+                d = date_type.fromisoformat(date_param)
+            except ValueError:
+                return JsonResponse({"error": "Date invalide (YYYY-MM-DD)."}, status=400)
+            resolved = BerceauImpactSettings.get_for_date(d)
+            for_date = {
+                "date": date_param,
+                "effective_from": resolved.effective_from.isoformat(),
+                "divisor_a1": float(resolved.divisor_a1),
+                "divisor_a3": float(resolved.divisor_a3),
+            }
+            if resolved.pk:
+                for_date["id"] = resolved.pk
+            payload["for_date"] = for_date
+        return JsonResponse(payload)
+    if request.method == "POST":
+        if not auth_can_do_action(request.user, "update"):
+            return json_forbidden()
+        if is_psp(request.user):
+            return json_forbidden()
+        payload = json_body(request)
+        effective_raw = (payload.get("effective_from") or "").strip()
+        if not effective_raw:
+            return JsonResponse({"error": "effective_from est obligatoire (YYYY-MM-DD)."}, status=400)
+        try:
+            effective_from = date_type.fromisoformat(effective_raw)
+        except ValueError:
+            return JsonResponse({"error": "effective_from invalide."}, status=400)
+        try:
+            divisor_a1 = float(payload.get("divisor_a1", DEFAULT_DIVISOR_A1))
+            divisor_a3 = float(payload.get("divisor_a3", DEFAULT_DIVISOR_A3))
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "divisor_a1 et divisor_a3 doivent etre numeriques."}, status=400)
+        if divisor_a1 <= 0 or divisor_a3 <= 0:
+            return JsonResponse({"error": "Les diviseurs doivent etre strictement positifs."}, status=400)
+        try:
+            obj = BerceauImpactSettings.objects.create(
+                effective_from=effective_from,
+                divisor_a1=divisor_a1,
+                divisor_a3=divisor_a3,
+            )
+        except DatabaseError:
+            logger.exception("api_berceau_impact_settings POST database error")
+            return JsonResponse(
+                {"error": "Erreur base de donnees. Executez: python manage.py migrate production."},
+                status=503,
+            )
+        return JsonResponse(_berceau_impact_settings_to_dict(obj), status=201)
+    return HttpResponse(status=405)
+
+
+def _berceau_objectif_settings_to_dict(obj: BerceauObjectifSettings) -> dict:
+    d: dict = {
+        "effective_from": obj.effective_from.isoformat(),
+        "objectif_total_a1": obj.objectif_total_for_line("A1"),
+        "objectif_total_a3": obj.objectif_total_for_line("A3"),
+    }
+    if obj.pk:
+        d["id"] = obj.pk
+    for key in BERCEAU_OBJECTIF_FIELD_NAMES:
+        d[key] = int(getattr(obj, key, 0) or 0)
+    return d
+
+
+def _upsert_berceau_objectif_settings(
+    source: BerceauProductionSettings,
+    effective_from: date_type,
+) -> BerceauObjectifSettings:
+    existing = BerceauObjectifSettings.objects.filter(effective_from=effective_from).order_by("-id").first()
+    values = {key: int(getattr(source, key, 0) or 0) for key in BERCEAU_OBJECTIF_FIELD_NAMES}
+    if existing:
+        for key, val in values.items():
+            setattr(existing, key, val)
+        existing.save()
+        return existing
+    return BerceauObjectifSettings.objects.create(effective_from=effective_from, **values)
+
+
+def _berceau_production_settings_to_dict(
+    obj: BerceauProductionSettings,
+    *,
+    as_of: date_type | None = None,
+    include_versions: bool = False,
+) -> dict:
+    target = as_of or date_type.today()
+    # Sans ?date= : objectifs du singleton (fiche en cours). Avec ?date= : version en vigueur ce jour-là.
+    if as_of is not None:
+        objectifs = BerceauObjectifSettings.get_for_date(as_of)
+        objectif_effective_from = objectifs.effective_from.isoformat()
+        objectif_version_id = objectifs.pk
+    else:
+        objectifs = obj
+        resolved = BerceauObjectifSettings.get_for_date(target)
+        objectif_effective_from = resolved.effective_from.isoformat()
+        objectif_version_id = resolved.pk
+    impact = BerceauImpactSettings.get_for_date(target)
+    d: dict = {
+        "objectif_a1_h1": objectifs.objectif_a1_h1,
+        "objectif_a1_h2": objectifs.objectif_a1_h2,
+        "objectif_a1_h3": objectifs.objectif_a1_h3,
+        "objectif_a1_h4": objectifs.objectif_a1_h4,
+        "objectif_a1_h5": objectifs.objectif_a1_h5,
+        "objectif_a1_h6": objectifs.objectif_a1_h6,
+        "objectif_a1_h7": objectifs.objectif_a1_h7,
+        "objectif_a1_h8": objectifs.objectif_a1_h8,
+        "objectif_a3_h1": objectifs.objectif_a3_h1,
+        "objectif_a3_h2": objectifs.objectif_a3_h2,
+        "objectif_a3_h3": objectifs.objectif_a3_h3,
+        "objectif_a3_h4": objectifs.objectif_a3_h4,
+        "objectif_a3_h5": objectifs.objectif_a3_h5,
+        "objectif_a3_h6": objectifs.objectif_a3_h6,
+        "objectif_a3_h7": objectifs.objectif_a3_h7,
+        "objectif_a3_h8": objectifs.objectif_a3_h8,
+        "objectif_total_a1": objectifs.objectif_total_for_line("A1"),
+        "objectif_total_a3": objectifs.objectif_total_for_line("A3"),
+        "objectif_effective_from": objectif_effective_from,
+        "objectif_resolved_for": target.isoformat(),
+        "divisor_a1": float(impact.divisor_a1),
+        "divisor_a3": float(impact.divisor_a3),
+        "divisor_effective_from": impact.effective_from.isoformat(),
+        "divisor_resolved_for": target.isoformat(),
+        "updated_at": obj.updated_at.isoformat() if obj.updated_at else None,
+    }
+    if objectif_version_id:
+        d["objectif_version_id"] = objectif_version_id
+    if impact.pk:
+        d["divisor_version_id"] = impact.pk
+    if include_versions:
+        impact_versions = list(BerceauImpactSettings.objects.order_by("-effective_from", "-id"))
+        d["impact_versions"] = [_berceau_impact_settings_to_dict(v) for v in impact_versions]
+        objectif_versions = list(BerceauObjectifSettings.objects.order_by("-effective_from", "-id"))
+        d["objectif_versions"] = [_berceau_objectif_settings_to_dict(v) for v in objectif_versions]
+    return d
+
+
+def _upsert_berceau_impact_divisors(divisor_a1: float, divisor_a3: float, effective_from: date_type) -> BerceauImpactSettings:
+    existing = BerceauImpactSettings.objects.filter(effective_from=effective_from).order_by("-id").first()
+    if existing:
+        existing.divisor_a1 = divisor_a1
+        existing.divisor_a3 = divisor_a3
+        existing.save(update_fields=["divisor_a1", "divisor_a3", "updated_at"])
+        return existing
+    return BerceauImpactSettings.objects.create(
+        effective_from=effective_from,
+        divisor_a1=divisor_a1,
+        divisor_a3=divisor_a3,
+    )
+
+
+def api_berceau_production_settings(request):
+    """Référentiel Berceau : objectifs horaires A1/A3 + temps de cycle (diviseurs impact)."""
+    if request.method == "GET":
+        if not auth_can_do_action(request.user, "read"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "Berceau":
+            return json_forbidden()
+        try:
+            obj = BerceauProductionSettings.get_singleton()
+        except DatabaseError:
+            logger.exception("api_berceau_production_settings GET database error")
+            return JsonResponse(
+                {"error": "Erreur base de donnees. Executez: python manage.py migrate production."},
+                status=503,
+            )
+        date_param = (request.GET.get("date") or "").strip()
+        as_of: date_type | None = None
+        if date_param:
+            try:
+                as_of = date_type.fromisoformat(date_param)
+            except ValueError:
+                return JsonResponse({"error": "Date invalide (YYYY-MM-DD)."}, status=400)
+        return JsonResponse(
+            _berceau_production_settings_to_dict(
+                obj,
+                as_of=as_of,
+                include_versions=not date_param,
+            )
+        )
+    if request.method in {"PUT", "PATCH"}:
+        if not auth_can_do_action(request.user, "update"):
+            return json_forbidden()
+        if is_psp(request.user):
+            return json_forbidden()
+        payload = json_body(request)
+        try:
+            obj = BerceauProductionSettings.get_singleton()
+        except DatabaseError:
+            logger.exception("api_berceau_production_settings PATCH database error")
+            return JsonResponse(
+                {"error": "Erreur base de donnees. Executez: python manage.py migrate production."},
+                status=503,
+            )
+        errors: dict[str, list[str]] = {}
+        for line in ("a1", "a3"):
+            for h in range(1, 9):
+                key = f"objectif_{line}_h{h}"
+                if key not in payload:
+                    continue
+                try:
+                    val = int(payload[key])
+                except (TypeError, ValueError):
+                    errors[key] = ["Valeur entière attendue."]
+                    continue
+                if val < 0:
+                    errors[key] = ["Doit être >= 0."]
+                    continue
+                setattr(obj, key, val)
+        divisor_touched = "divisor_a1" in payload or "divisor_a3" in payload
+        new_divisor_a1: float | None = None
+        new_divisor_a3: float | None = None
+        if divisor_touched:
+            today = date_type.today()
+            current = BerceauImpactSettings.get_for_date(today)
+            try:
+                new_divisor_a1 = float(payload.get("divisor_a1", current.divisor_a1))
+                new_divisor_a3 = float(payload.get("divisor_a3", current.divisor_a3))
+            except (TypeError, ValueError):
+                errors["divisor"] = ["divisor_a1 et divisor_a3 doivent être numériques."]
+            else:
+                if new_divisor_a1 <= 0 or new_divisor_a3 <= 0:
+                    errors["divisor"] = ["Les temps de cycle doivent être strictement positifs."]
+        if errors:
+            return JsonResponse({"errors": errors}, status=400)
+        objectif_touched = any(key in payload for key in BERCEAU_OBJECTIF_FIELD_NAMES)
+        obj.save()
+        today = date_type.today()
+        if objectif_touched:
+            _upsert_berceau_objectif_settings(obj, today)
+        if divisor_touched and new_divisor_a1 is not None and new_divisor_a3 is not None:
+            current = BerceauImpactSettings.get_for_date(today)
+            changed = (
+                abs(new_divisor_a1 - float(current.divisor_a1)) > 1e-9
+                or abs(new_divisor_a3 - float(current.divisor_a3)) > 1e-9
+            )
+            if changed:
+                _upsert_berceau_impact_divisors(new_divisor_a1, new_divisor_a3, today)
+        return JsonResponse(_berceau_production_settings_to_dict(obj, include_versions=True))
+    return HttpResponse(status=405)
+
+
+def _ccb_settings_to_dict(obj: CcbProductionSettings) -> dict:
+    d = {
+        "objectif_h1": obj.objectif_h1,
+        "objectif_h2": obj.objectif_h2,
+        "objectif_h3": obj.objectif_h3,
+        "objectif_h4": obj.objectif_h4,
+        "objectif_h5": obj.objectif_h5,
+        "objectif_h6": obj.objectif_h6,
+        "objectif_h7": obj.objectif_h7,
+        "objectif_h8": obj.objectif_h8,
+        "objectif_total": obj.objectif_total(),
+        "updated_at": obj.updated_at.isoformat() if obj.updated_at else None,
+    }
+    return d
+
+
+def api_ccb_production_settings(request):
+    """Objectifs horaires par défaut CCB (singleton, toutes dates / shifts)."""
+    if request.method == "GET":
+        if not auth_can_do_action(request.user, "read"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "CCB":
+            return json_forbidden()
+        try:
+            obj = CcbProductionSettings.get_singleton()
+        except DatabaseError:
+            logger.exception("api_ccb_production_settings GET database error")
+            return JsonResponse(
+                {"error": "Erreur base de donnees. Executez: python manage.py migrate (production_ccb)."},
+                status=503,
+            )
+        return JsonResponse(_ccb_settings_to_dict(obj))
+    if request.method in {"PUT", "PATCH"}:
+        if not auth_can_do_action(request.user, "update"):
+            return json_forbidden()
+        if is_psp(request.user) and get_psp_equipe(request.user) != "CCB":
+            return json_forbidden()
+        payload = json_body(request)
+        try:
+            obj = CcbProductionSettings.get_singleton()
+        except DatabaseError:
+            logger.exception("api_ccb_production_settings PATCH database error")
+            return JsonResponse(
+                {"error": "Erreur base de donnees. Executez: python manage.py migrate (production_ccb)."},
+                status=503,
+            )
+        errors: dict[str, list[str]] = {}
+        for h in range(1, 9):
+            key = f"objectif_h{h}"
+            if key not in payload:
+                continue
+            try:
+                val = int(payload[key])
+            except (TypeError, ValueError):
+                errors[key] = ["Valeur entière attendue."]
+                continue
+            if val < 0:
+                errors[key] = ["Doit être >= 0."]
+                continue
+            setattr(obj, key, val)
+        if errors:
+            return JsonResponse({"errors": errors}, status=400)
+        obj.save()
+        return JsonResponse(_ccb_settings_to_dict(obj))
+    return HttpResponse(status=405)
 
 
 def api_production_ccb(request):

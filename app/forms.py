@@ -191,14 +191,30 @@ class ProductionCCBForm(forms.ModelForm):
             "date",
             "shift",
             "objectif",
-            "production_h1",
-            "production_h2",
-            "production_h3",
-            "production_h4",
-            "production_h5",
-            "production_h6",
-            "production_h7",
-            "production_h8",
+            "objectif_h1",
+            "objectif_h2",
+            "objectif_h3",
+            "objectif_h4",
+            "objectif_h5",
+            "objectif_h6",
+            "objectif_h7",
+            "objectif_h8",
+            "production_lhd_h1",
+            "production_lhd_h2",
+            "production_lhd_h3",
+            "production_lhd_h4",
+            "production_lhd_h5",
+            "production_lhd_h6",
+            "production_lhd_h7",
+            "production_lhd_h8",
+            "production_rhd_h1",
+            "production_rhd_h2",
+            "production_rhd_h3",
+            "production_rhd_h4",
+            "production_rhd_h5",
+            "production_rhd_h6",
+            "production_rhd_h7",
+            "production_rhd_h8",
             "rebut_h1",
             "rebut_h2",
             "rebut_h3",
@@ -225,7 +241,6 @@ class ProductionCCBForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        cleaned["objectif"] = CCB_OBJECTIF_TOTAL_SHIFT
         if cleaned.get("retouche") is None:
             cleaned["retouche"] = 0
         date = cleaned.get("date")

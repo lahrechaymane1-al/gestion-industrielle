@@ -4,6 +4,11 @@ import type { ProductionBerceauRow } from "../api/types";
 export const DIVISOR_A1 = 1.3;
 export const DIVISOR_A3 = 1.8;
 
+export type ImpactDivisors = {
+  divisor_a1: number;
+  divisor_a3: number;
+};
+
 export type Diversity = "A1" | "A3";
 
 /** Normalize API shape: une fiche ou plusieurs (même date/shift, lignes A1/A3 distinctes). */
@@ -17,9 +22,17 @@ export function parseDiversiteFromCause(cause: string | undefined | null): Diver
   return null;
 }
 
-function asProductionRowList(prod: ProductionRowsForImpact): ProductionBerceauRow[] {
+function isProductionRowsArray(
+  value: ProductionBerceauRow | readonly ProductionBerceauRow[]
+): value is readonly ProductionBerceauRow[] {
+  return Array.isArray(value);
+}
+
+/** API may return one fiche or several (A/B/N) — always iterate as an array. */
+export function asProductionRowList(prod: ProductionRowsForImpact): ProductionBerceauRow[] {
   if (prod == null) return [];
-  return Array.isArray(prod) ? [...prod] : [prod];
+  if (isProductionRowsArray(prod)) return Array.from(prod);
+  return [prod];
 }
 
 export function lineFromProductionHour(row: ProductionBerceauRow | null | undefined, hour: number): Diversity | null {
@@ -51,9 +64,11 @@ export function resolveDiversityForImpact(
   return null;
 }
 
-function divisorForDiversity(d: Diversity | null): number | null {
-  if (d === "A1") return DIVISOR_A1;
-  if (d === "A3") return DIVISOR_A3;
+function divisorForDiversity(d: Diversity | null, divisors?: ImpactDivisors): number | null {
+  const a1 = divisors?.divisor_a1 ?? DIVISOR_A1;
+  const a3 = divisors?.divisor_a3 ?? DIVISOR_A3;
+  if (d === "A1") return a1;
+  if (d === "A3") return a3;
   return null;
 }
 
@@ -151,9 +166,10 @@ export function hourlyObjectiveForDiversity(
 export function downtimeImpactPercent(
   tempsArretMin: number,
   diversity: Diversity | null,
-  objectifShift: number
+  objectifShift: number,
+  divisors?: ImpactDivisors
 ): number {
-  const div = divisorForDiversity(diversity);
+  const div = divisorForDiversity(diversity, divisors);
   if (div == null) return 0;
   const obj = Number(objectifShift || 0);
   if (obj <= 0) return 0;
@@ -212,7 +228,8 @@ export type ParetoTypeAggregate = {
 
 export function analyzeParetoMinuteBuckets(
   buckets: Map<string, number>,
-  objectifShift: number
+  objectifShift: number,
+  divisors?: ImpactDivisors
 ): { byType: Map<string, ParetoTypeAggregate>; totalPctA1: number; totalPctA3: number } {
   const denom = Number(objectifShift || 0);
   const byType = new Map<string, ParetoTypeAggregate>();
@@ -224,7 +241,7 @@ export function analyzeParetoMinuteBuckets(
     const [typeName, moyenSeg, posteSeg, , divStr] = parts;
     const div = divStr as Diversity;
     if (div !== "A1" && div !== "A3") continue;
-    const pct = downtimeImpactPercent(minutes, div, denom);
+    const pct = downtimeImpactPercent(minutes, div, denom, divisors);
     if (div === "A1") totalPctA1 += pct;
     else totalPctA3 += pct;
     const moyenNom = moyenSeg === "__none__" ? "" : moyenSeg;
@@ -287,7 +304,8 @@ export type ParetoPosteAggregate = {
 
 export function analyzeParetoPosteMinuteBuckets(
   buckets: Map<string, number>,
-  objectifShift: number
+  objectifShift: number,
+  divisors?: ImpactDivisors
 ): { byPoste: Map<string, ParetoPosteAggregate>; totalPctA1: number; totalPctA3: number } {
   const denom = Number(objectifShift || 0);
   const byPoste = new Map<string, ParetoPosteAggregate>();
@@ -299,7 +317,7 @@ export function analyzeParetoPosteMinuteBuckets(
     const [posteName, , divStr] = parts;
     const div = divStr as Diversity;
     if (div !== "A1" && div !== "A3") continue;
-    const pct = downtimeImpactPercent(minutes, div, denom);
+    const pct = downtimeImpactPercent(minutes, div, denom, divisors);
     if (div === "A1") totalPctA1 += pct;
     else totalPctA3 += pct;
     if (!byPoste.has(posteName)) {

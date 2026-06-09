@@ -5,11 +5,11 @@ from django.db import models
 
 class StockJournal(models.Model):
     EQUIPE_CHOICES = (("Berceau", "Berceau"), ("CCB", "CCB"))
-    LINE_CHOICES = (("A1", "A1"), ("A3", "A3"))
+    LINE_CHOICES = (("A1", "A1"), ("A3", "A3"), ("LHD", "LHD"), ("RHD", "RHD"))
 
     date = models.DateField()
     equipe = models.CharField(max_length=20, choices=EQUIPE_CHOICES, default="Berceau")
-    line = models.CharField(max_length=2, choices=LINE_CHOICES, null=True, blank=True)
+    line = models.CharField(max_length=8, choices=LINE_CHOICES, null=True, blank=True)
     stock_debut = models.PositiveIntegerField(default=0, validators=[MinValueValidator(0)])
     entree_calculee = models.PositiveIntegerField(default=0, validators=[MinValueValidator(0)])
     sortie_montage = models.PositiveIntegerField(default=0, validators=[MinValueValidator(0)])

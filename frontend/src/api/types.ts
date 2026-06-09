@@ -146,6 +146,7 @@ export interface ProductionCCBRow {
   id: number;
   date: string;
   shift: string;
+  line?: "LHD" | "RHD";
   objectif: number;
   objectif_h1: number;
   objectif_h2: number;
@@ -163,6 +164,22 @@ export interface ProductionCCBRow {
   production_h6: number;
   production_h7: number;
   production_h8: number;
+  production_lhd_h1: number;
+  production_lhd_h2: number;
+  production_lhd_h3: number;
+  production_lhd_h4: number;
+  production_lhd_h5: number;
+  production_lhd_h6: number;
+  production_lhd_h7: number;
+  production_lhd_h8: number;
+  production_rhd_h1: number;
+  production_rhd_h2: number;
+  production_rhd_h3: number;
+  production_rhd_h4: number;
+  production_rhd_h5: number;
+  production_rhd_h6: number;
+  production_rhd_h7: number;
+  production_rhd_h8: number;
   rebut_h1: number;
   rebut_h2: number;
   rebut_h3: number;
@@ -287,7 +304,7 @@ export interface StockJournalRow {
   id: number | null;
   date: string;
   equipe: EquipeScope;
-  line: "A1" | "A3" | null;
+  line: "A1" | "A3" | "LHD" | "RHD" | null;
   stock_debut: number;
   entree_calculee: number;
   entree_par_shift: { A: number; B: number; N: number };
@@ -303,4 +320,40 @@ export interface StockJournalRow {
 export interface StockJournalResponse {
   current: StockJournalRow;
   history: StockJournalRow[];
+}
+
+export type ConsommableType = string;
+
+export type ConsommableShift = "A" | "B" | "N";
+
+export interface ConsommableItemRow {
+  id: number;
+  equipe: EquipeScope;
+  type_materiel: ConsommableType;
+  name: string;
+  reference: string;
+  unit_price_eur: string;
+  is_active: boolean;
+}
+
+export interface ConsommablePurchaseRow {
+  id: number;
+  equipe: EquipeScope;
+  shift: ConsommableShift;
+  item_id: number;
+  item_name: string;
+  item_reference: string;
+  item_type: ConsommableType;
+  quantity: number;
+  unit_price_eur: string;
+  total_price_eur: string;
+  purchase_date: string;
+  note: string;
+  created_at: string | null;
+}
+
+export interface ConsommableShiftStat {
+  shift: ConsommableShift;
+  total_eur: string;
+  total_qty: number;
 }

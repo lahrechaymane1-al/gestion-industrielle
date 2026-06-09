@@ -37,6 +37,7 @@ type StockJournalPageProps = {
 };
 
 const BERCEAU_LINES = ["A1", "A3"] as const;
+const CCB_LINES = ["LHD", "RHD"] as const;
 
 export default function StockJournalPage({ equipe }: StockJournalPageProps) {
   const me = useMe();
@@ -45,7 +46,7 @@ export default function StockJournalPage({ equipe }: StockJournalPageProps) {
   const [detailRow, setDetailRow] = useState<StockJournalRow | null>(null);
 
   const canWrite = me?.role === "RU" || me?.role === "ADMIN";
-  const lines = equipe === "Berceau" ? BERCEAU_LINES : ([undefined] as const);
+  const lines = equipe === "Berceau" ? BERCEAU_LINES : CCB_LINES;
 
   const historyQueries = useQueries({
     queries: lines.map((line) => ({
@@ -70,26 +71,17 @@ export default function StockJournalPage({ equipe }: StockJournalPageProps) {
   }, [historyQueries]);
 
   const exportLinks = useMemo(() => {
-    if (equipe === "Berceau") {
-      return BERCEAU_LINES.map((line) => {
-        const params = new URLSearchParams({
-          equipe,
-          line,
-          date,
-          days: String(HISTORY_DAYS),
-          export: "excel",
-        });
-        return { line, href: `/api/stock/journal/?${params.toString()}` };
+    return lines.map((line) => {
+      const params = new URLSearchParams({
+        equipe,
+        line,
+        date,
+        days: String(HISTORY_DAYS),
+        export: "excel",
       });
-    }
-    const params = new URLSearchParams({
-      equipe,
-      date,
-      days: String(HISTORY_DAYS),
-      export: "excel",
+      return { line, href: `/api/stock/journal/?${params.toString()}` };
     });
-    return [{ line: undefined as "A1" | "A3" | undefined, href: `/api/stock/journal/?${params.toString()}` }];
-  }, [equipe, date]);
+  }, [equipe, date, lines]);
 
   return (
     <Stack spacing={2.5}>
@@ -99,10 +91,14 @@ export default function StockJournalPage({ equipe }: StockJournalPageProps) {
             <Typography variant="h5" fontWeight={800}>
               {`Stock · UEP ${equipe}`}
             </Typography>
-            {equipe === "Berceau" && (
+            {equipe === "Berceau" ? (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                 Stock A1 et stock A3 sont suivis séparément : chaque diversité a sa saisie sortie montage et son
                 graphique.
+              </Typography>
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                Stock LHD et stock RHD sont suivis séparément, comme les diversités Berceau.
               </Typography>
             )}
           </Stack>
@@ -112,32 +108,16 @@ export default function StockJournalPage({ equipe }: StockJournalPageProps) {
 
       {errorMsg && <Alert severity="error">{errorMsg}</Alert>}
 
-      {equipe === "Berceau" ? (
-        <>
-          <StockDiversitySection
-            equipe={equipe}
-            line="A1"
-            date={date}
-            canWrite={canWrite}
-            onError={setErrorMsg}
-          />
-          <StockDiversitySection
-            equipe={equipe}
-            line="A3"
-            date={date}
-            canWrite={canWrite}
-            onError={setErrorMsg}
-          />
-        </>
-      ) : (
+      {lines.map((line) => (
         <StockDiversitySection
+          key={line}
           equipe={equipe}
-          line={undefined}
+          line={line}
           date={date}
           canWrite={canWrite}
           onError={setErrorMsg}
         />
-      )}
+      ))}
 
       <TableContainer component={Paper} sx={{ borderRadius: 3 }}>
         <Stack
@@ -172,7 +152,7 @@ export default function StockJournalPage({ equipe }: StockJournalPageProps) {
           <TableHead>
             <TableRow>
               <TableCell>Date</TableCell>
-              {equipe === "Berceau" ? <TableCell>Diversité</TableCell> : null}
+              <TableCell>Diversité</TableCell>
               <TableCell align="right">Entree Shift A</TableCell>
               <TableCell align="right">Entree Shift B</TableCell>
               <TableCell align="right">Entree Shift N</TableCell>
@@ -186,23 +166,23 @@ export default function StockJournalPage({ equipe }: StockJournalPageProps) {
           <TableBody>
             {historyLoading && (
               <TableRow>
-                <TableCell colSpan={equipe === "Berceau" ? 10 : 9}>
+                <TableCell colSpan={10}>
                   <Typography color="text.secondary">Chargement...</Typography>
                 </TableCell>
               </TableRow>
             )}
             {!historyLoading && mergedHistory.length === 0 && (
               <TableRow>
-                <TableCell colSpan={equipe === "Berceau" ? 10 : 9}>
+                <TableCell colSpan={10}>
                   <Typography color="text.secondary">Aucune donnee sur cette periode.</Typography>
                 </TableCell>
               </TableRow>
             )}
             {!historyLoading &&
-              mergedHistory.slice(0, HISTORY_DAYS * (equipe === "Berceau" ? 2 : 1)).map((row) => (
+              mergedHistory.slice(0, HISTORY_DAYS * lines.length).map((row) => (
                 <TableRow key={`${row.date}-${row.equipe}-${row.line ?? "all"}`} hover>
                   <TableCell>{row.date}</TableCell>
-                  {equipe === "Berceau" ? <TableCell>{row.line ?? "—"}</TableCell> : null}
+                  <TableCell>{row.line ?? "—"}</TableCell>
                   <TableCell align="right">{row.entree_par_shift.A}</TableCell>
                   <TableCell align="right">{row.entree_par_shift.B}</TableCell>
                   <TableCell align="right">{row.entree_par_shift.N}</TableCell>

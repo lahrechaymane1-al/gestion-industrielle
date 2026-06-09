@@ -73,6 +73,11 @@ import {
   sumAllHourlyObjectifsAcrossRows,
   summedObjectifsFromProductionRow,
 } from "../../domain/downtimeImpact";
+import {
+  BERCEAU_PRODUCTION_SETTINGS_QUERY_KEY,
+  fetchBerceauProductionSettings,
+  resolveBerceauCycleTimeForDate,
+} from "../production/berceauProductionSettings";
 
 const alerteBaseSchema = z.object({
   module_id: z.coerce.number().int().positive(),
@@ -210,6 +215,13 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
           params: { page: 1, per_page: 50, date: filterDate, shift: effectiveFilterShift },
         })
       ).data.results?.[0] ?? null,
+  });
+
+  const { data: productionSettings } = useQuery({
+    queryKey: BERCEAU_PRODUCTION_SETTINGS_QUERY_KEY,
+    queryFn: () => fetchBerceauProductionSettings(),
+    enabled: equipe === "Berceau",
+    staleTime: 60_000,
   });
 
   const productionDayAllShiftsQuery = useQuery({
@@ -476,6 +488,14 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
   );
   const graphRows = useMemo(() => arretsGraphQuery.data ?? [], [arretsGraphQuery.data]);
 
+  const impactDivisors = useMemo(() => {
+    if (!filterDate || !productionSettings) return undefined;
+    return resolveBerceauCycleTimeForDate(productionSettings, filterDate);
+  }, [filterDate, productionSettings]);
+
+  const cycleTimeA1 = impactDivisors?.divisor_a1 ?? productionSettings?.divisor_a1 ?? 1.3;
+  const cycleTimeA3 = impactDivisors?.divisor_a3 ?? productionSettings?.divisor_a3 ?? 1.8;
+
   const graphImpact = useMemo(() => {
     if (!graphEnabled) return null;
     const buckets = new Map<string, number>();
@@ -483,8 +503,8 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
     for (const row of graphRows) {
       addRowToParetoMinuteBuckets(buckets, row, prodForBuckets);
     }
-    return analyzeParetoMinuteBuckets(buckets, objectifJourTotal);
-  }, [graphEnabled, graphRows, prodRowsForImpact, objectifJourTotal]);
+    return analyzeParetoMinuteBuckets(buckets, objectifJourTotal, impactDivisors);
+  }, [graphEnabled, graphRows, prodRowsForImpact, objectifJourTotal, impactDivisors]);
 
   const graphData = useMemo(() => {
     if (!graphImpact) return [];
@@ -559,6 +579,26 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
           </Stack>
         </Stack>
       </Paper>
+
+      {isCcb && canCreate && (
+        <Alert
+          severity={panneTypes.length === 0 ? "warning" : "info"}
+          action={
+            <PanneTypesManagerDialog
+              equipe={equipe}
+              canCreate={canCreate}
+              canUpdate={canUpdate}
+              canDelete={canDelete}
+              variant="inline"
+            />
+          }
+          sx={{ borderRadius: 2 }}
+        >
+          {panneTypes.length === 0
+            ? "Aucun type d'arrêt CCB pour l'instant. Créez vos types (ils seront enregistrés en base) avant de saisir des arrêts."
+            : `${panneTypes.length} type(s) d'arrêt CCB disponibles. Vous pouvez en ajouter, modifier ou supprimer à tout moment.`}
+        </Alert>
+      )}
 
       <Paper
         elevation={0}
@@ -687,7 +727,7 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                 {objectifA1 > 0 ? `${totalPct.a1.toFixed(2)}%` : "-"}
               </Typography>
               <Typography variant="caption" sx={{ opacity: 0.75 }}>
-                Formule: (temps / 1.3) × (100 / objectif jour, Σ H1–H8 A+B+N)
+                Formule: (temps / {cycleTimeA1}) × (100 / objectif jour, Σ H1–H8 A+B+N)
               </Typography>
             </Paper>
             <Paper sx={{ p: 1.4, borderRadius: 3, minWidth: 220 }}>
@@ -698,7 +738,7 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                 {objectifA3 > 0 ? `${totalPct.a3.toFixed(2)}%` : "-"}
               </Typography>
               <Typography variant="caption" sx={{ opacity: 0.75 }}>
-                Formule: (temps / 1.8) × (100 / objectif jour, Σ H1–H8 A+B+N)
+                Formule: (temps / {cycleTimeA3}) × (100 / objectif jour, Σ H1–H8 A+B+N)
               </Typography>
             </Paper>
             <Paper sx={{ p: 1.4, borderRadius: 3, flex: 1 }}>
@@ -904,7 +944,7 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
               {isCcb ? (
                 <>
                   <Chip label="Etape 1: Poste" size="small" color={posteId ? "primary" : "default"} />
-                  <Chip label="Etape 2: Moyen" size="small" color={moyenId ? "primary" : "default"} />
+                  <Chip label="Etape 2: Moyenne / module" size="small" color={moyenId ? "primary" : "default"} />
                   <Chip label="Etape 3: Type d'arrêt" size="small" color={form.watch("panne_type_id") ? "primary" : "default"} />
                 </>
               ) : (
@@ -938,16 +978,16 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                 </TextField>
                 <TextField
                   select
-                  label="Moyen (optionnel)"
+                  label="Moyenne / module (optionnel)"
                   fullWidth
                   disabled={!posteId}
                   value={moyenId || ""}
                   helperText={
                     !posteId
-                      ? "Choisir un poste d'abord — la liste des moyens dépend du poste."
+                      ? "Choisir un poste d'abord — la liste des moyennes/modules dépend du poste."
                       : moyens.length === 0
-                        ? "Aucun moyen pour ce poste — vous pouvez enregistrer sans moyen."
-                        : `Moyens pour « ${selectedPoste?.name ?? "…"} » (facultatif)`
+                        ? "Aucune moyenne/module pour ce poste — vous pouvez enregistrer sans moyenne."
+                        : `Moyennes/modules pour « ${selectedPoste?.name ?? "…"} » (facultatif)`
                   }
                   onChange={(e) => {
                     const v = e.target.value;
@@ -955,7 +995,7 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                   }}
                 >
                   <MenuItem value="">
-                    <em>Aucun moyen</em>
+                    <em>Aucune moyenne / module</em>
                   </MenuItem>
                   {moyens.map((m) => (
                     <MenuItem key={m.id} value={m.id}>
@@ -1048,7 +1088,17 @@ export default function AlertePanneBerceauPage({ equipe = "Berceau" }: AlertePan
                 fullWidth
                 value={form.watch("panne_type_id") || ""}
                 onChange={(e) => form.setValue("panne_type_id", Number(e.target.value) as never)}
+                helperText={
+                  isCcb && panneTypes.length === 0
+                    ? "Créez au moins un type via « Gérer les types » ou « Types d'arrêt »."
+                    : undefined
+                }
               >
+                {panneTypes.length === 0 && (
+                  <MenuItem value="" disabled>
+                    Aucun type — ajoutez-en dans « Types d&apos;arrêt »
+                  </MenuItem>
+                )}
                 {panneTypes.map((pt) => (
                   <MenuItem key={pt.id} value={pt.id}>
                     {pt.name}

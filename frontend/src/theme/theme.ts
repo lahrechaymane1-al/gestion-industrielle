@@ -67,6 +67,22 @@ export const theme = createTheme({
           backgroundAttachment: "fixed",
           color: textPrimary,
         },
+        "@keyframes gi-fade-in": {
+          from: { opacity: 0, transform: "translateY(10px)" },
+          to: { opacity: 1, transform: "translateY(0)" },
+        },
+        "@keyframes gi-rise-in": {
+          from: { opacity: 0, transform: "translateY(16px) scale(0.985)" },
+          to: { opacity: 1, transform: "translateY(0) scale(1)" },
+        },
+        "@media (prefers-reduced-motion: reduce)": {
+          "*, *::before, *::after": {
+            animationDuration: "0.001ms !important",
+            animationIterationCount: "1 !important",
+            transitionDuration: "0.001ms !important",
+            scrollBehavior: "auto !important",
+          },
+        },
         "input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button": {
           WebkitAppearance: "none",
           margin: 0,

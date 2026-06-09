@@ -70,6 +70,13 @@ def _panne_type_is_catalog(name: str, equipe: str) -> bool:
     return False
 
 
+def _panne_type_id_allowed_for_equipe(panne_type_id: int | None, equipe: str) -> bool:
+    """True si le type est actif et visible pour l'UEP (catalogue + types créés dans l'app)."""
+    if not panne_type_id or equipe not in {"Berceau", "CCB"}:
+        return False
+    return _panne_types_queryset_for_equipe(equipe).filter(pk=panne_type_id).exists()
+
+
 def _panne_type_to_dict(item: PanneType, equipe: str = "") -> dict:
     data = model_to_dict(item, fields=["id", "name", "description", "is_active"])
     if equipe:
@@ -285,11 +292,15 @@ def api_panne_type_detail(request, pk):
         if not auth_can_do_action(request.user, "delete"):
             return json_forbidden()
         item = get_object_or_404(PanneType, pk=pk)
-        is_catalog = (
-            _panne_type_is_catalog(item.name, equipe)
-            if equipe
-            else item.name in BERCEAU_PANNE_TYPE_NAMES or item.name in CCB_PANNE_TYPE_NAMES
-        )
+        # CCB : référentiel géré dans l'app (phase de démarrage) — suppression physique si possible.
+        if equipe == "CCB":
+            is_catalog = False
+        elif equipe == "Berceau":
+            is_catalog = _panne_type_is_catalog(item.name, "Berceau")
+        elif equipe:
+            is_catalog = _panne_type_is_catalog(item.name, equipe)
+        else:
+            is_catalog = item.name in BERCEAU_PANNE_TYPE_NAMES or item.name in CCB_PANNE_TYPE_NAMES
         # Arrêts supprimés côté UI restent en base (is_deleted=True) avec FK PROTECT → pas de hard delete.
         referenced = AlertePanne.objects.filter(panne_type_id=pk).exists()
         if referenced or is_catalog:
@@ -397,10 +408,8 @@ def _validate_alerte_ccb_referentiel(
             if moyen.name not in allowed:
                 return False, "Moyenne/module non autorise pour ce poste CCB."
 
-    if panne_type_id:
-        pt = PanneType.objects.filter(pk=panne_type_id, is_active=True).first()
-        if not pt or pt.name not in CCB_PANNE_TYPE_NAMES:
-            return False, "Type de panne non autorise pour CCB."
+    if panne_type_id and not _panne_type_id_allowed_for_equipe(int(panne_type_id), "CCB"):
+        return False, "Type de panne non autorise pour CCB."
     return True, None
 
 

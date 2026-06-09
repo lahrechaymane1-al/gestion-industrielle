@@ -41,7 +41,7 @@ import {
 
 type StockDiversitySectionProps = {
   equipe: EquipeScope;
-  line: "A1" | "A3" | undefined;
+  line: "A1" | "A3" | "LHD" | "RHD";
   date: string;
   canWrite: boolean;
   onError: (message: string | null) => void;
@@ -63,7 +63,9 @@ export default function StockDiversitySection({
   const hydratedKeyRef = useRef("");
 
   const diversityTitle =
-    line === "A1" || line === "A3" ? `Diversité ${line}` : "Stock UEP";
+    line === "A1" || line === "A3" || line === "LHD" || line === "RHD"
+      ? `Diversité ${line}`
+      : "Stock UEP";
   const sortieLabel = `Sortie montage (${stockLineLabel(line)})`;
   const entreeBarName = line ? `Entree stock ${line}` : "Entree stock";
   const sortieBarName = line ? `Sortie montage (stock ${line})` : "Sortie montage";

@@ -27,8 +27,8 @@ def _normalize_scope(equipe: str | None, line: str | None) -> tuple[str, str | N
     if eq == "Berceau":
         if ln not in {"A1", "A3"}:
             ln = "A1"
-    else:
-        ln = None
+    elif ln not in {"LHD", "RHD"}:
+        ln = "LHD"
     return eq, ln
 
 
@@ -51,6 +51,20 @@ def _berceau_entree_by_line(target_date: date_cls, line: str) -> tuple[int, dict
     return total, by_shift
 
 
+def _ccb_entree_by_line(target_date: date_cls, line: str) -> tuple[int, dict]:
+    """Entrées stock CCB : somme production_lhd_h* ou production_rhd_h* selon la diversité."""
+    by_shift = {"A": 0, "B": 0, "N": 0}
+    prefix = "production_lhd_h" if line == "LHD" else "production_rhd_h"
+    for row in ProductionCCB.objects.filter(date=target_date):
+        shift = str(row.shift or "")
+        if shift not in by_shift:
+            continue
+        for hour in range(1, 9):
+            by_shift[shift] += int(getattr(row, f"{prefix}{hour}", 0) or 0)
+    total = by_shift["A"] + by_shift["B"] + by_shift["N"]
+    return total, by_shift
+
+
 def _compute_entree(
     target_date: date_cls, equipe: str, line: str | None, shift_scope: str | None = None
 ) -> tuple[int, dict]:
@@ -63,16 +77,11 @@ def _compute_entree(
             return by_shift[shift_scope], by_shift
         return total, by_shift
 
-    qs = ProductionCCB.objects.filter(date=target_date)
+    if line not in {"LHD", "RHD"}:
+        line = "LHD"
+    total, by_shift = _ccb_entree_by_line(target_date, line)
     if shift_scope in {"A", "B", "N"}:
-        qs = qs.filter(shift=shift_scope)
-    shift_rows = qs.values("shift").annotate(total=Sum("volume"))
-    by_shift = {"A": 0, "B": 0, "N": 0}
-    for row in shift_rows:
-        shift = str(row.get("shift") or "")
-        if shift in by_shift:
-            by_shift[shift] = int(row.get("total") or 0)
-    total = by_shift["A"] + by_shift["B"] + by_shift["N"]
+        return by_shift[shift_scope], by_shift
     return total, by_shift
 
 
